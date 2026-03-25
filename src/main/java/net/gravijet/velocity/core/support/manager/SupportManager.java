@@ -1,14 +1,14 @@
-package net.gravijet.support.manager;
+package net.gravijet.velocity.core.support.manager;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.scheduler.ScheduledTask;
-import net.gravijet.support.Main;
-import net.gravijet.support.config.Config;
-import net.gravijet.support.model.BanEntry;
-import net.gravijet.support.model.RatedSession;
-import net.gravijet.support.model.SupportSession;
-import net.gravijet.support.util.DurationUtil;
+import net.gravijet.velocity.core.support.SupportPlugin;
+import net.gravijet.velocity.core.support.config.SupportConfig;
+import net.gravijet.velocity.core.support.model.BanEntry;
+import net.gravijet.velocity.core.support.model.RatedSession;
+import net.gravijet.velocity.core.support.model.SupportSession;
+import net.gravijet.velocity.core.support.util.DurationUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -28,8 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 public class SupportManager {
-    private final Main plugin;
-    private final Config config;
+    private final SupportPlugin plugin;
+    private final SupportConfig config;
     private final ObjectMapper mapper = new ObjectMapper();
     private final File bansFile;
     private final LegacyComponentSerializer serializer = LegacyComponentSerializer.legacyAmpersand();
@@ -56,7 +56,7 @@ public class SupportManager {
     private final Map<String, String> linkedAccounts   = new ConcurrentHashMap<>(); // discordId -> mcName
     private final File                linkedAccountsFile;
 
-    public SupportManager(Main plugin, Config config) {
+    public SupportManager(SupportPlugin plugin, SupportConfig config) {
         this.plugin              = plugin;
         this.config              = config;
         this.bansFile            = new File(plugin.getDataDirectory().toFile(), "bans.json");
@@ -71,10 +71,14 @@ public class SupportManager {
     // -------------------------------------------------------------------------
 
     private void startAutoCloseTask() {
-        autoCloseTask = plugin.getServer().getScheduler()
-                .buildTask(plugin, this::checkInactiveSessions)
-                .repeat(5, TimeUnit.MINUTES)
-                .schedule();
+        try {
+            autoCloseTask = plugin.getServer().getScheduler()
+                    .buildTask(plugin.getCorePlugin(), this::checkInactiveSessions)
+                    .repeat(5, TimeUnit.MINUTES)
+                    .schedule();
+        } catch (Exception e) {
+            plugin.getLogger().warn("Could not schedule auto-close task: {}. Sessions will not be auto-closed.", e.getMessage());
+        }
     }
 
     public void shutdown() {
@@ -149,7 +153,7 @@ public class SupportManager {
             return false;
         }
         if (playerToSession.containsKey(player.getUniqueId())) {
-            player.sendMessage(serializer.deserialize(config.getNoActiveSupport(lang)));
+            player.sendMessage(serializer.deserialize(config.getAlreadyInSession(lang)));
             return false;
         }
         return true;
@@ -390,9 +394,17 @@ public class SupportManager {
         if (session == null) return;
 
         sessionLastActivity.put(sessionId, Instant.now());
-        plugin.getServer().getPlayer(session.getPlayerId()).ifPresent(p -> p.sendMessage(serializer.deserialize(
-                config.getChatFormatPlayerStaff(session.getLanguage()).replace("{message}", message))));
-        logSessionChat(session, "Discord", message);
+
+        String staffFmt = config.getChatFormatPlayerStaff(session.getLanguage()).replace("{message}", message);
+        plugin.getServer().getPlayer(session.getPlayerId())
+                .ifPresent(p -> p.sendMessage(serializer.deserialize(staffFmt)));
+
+        // Also relay to the Minecraft staff member if one has claimed the session
+        session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer)
+                .ifPresent(s -> s.sendMessage(serializer.deserialize(
+                        config.getChatFormatStaff().replace("{player}", "Discord").replace("{message}", message))));
+
+        logSessionChat(session, "Discord/" + discordStaffId, message);
     }
 
     // -------------------------------------------------------------------------
@@ -422,7 +434,7 @@ public class SupportManager {
         SupportSession session = lastSessionId != null ? closedSessions.get(lastSessionId) : null;
 
         if (session == null) {
-            player.sendMessage(serializer.deserialize(config.getNotSessionPlayer("en")));
+            player.sendMessage(serializer.deserialize(config.getNotSessionPlayer(getPlayerLanguage(player))));
             return;
         }
 
@@ -677,7 +689,9 @@ public class SupportManager {
 
     public UUID getPlayerSessionId(UUID playerId) { return playerToSession.get(playerId); }
 
-    private boolean hasPermission(Player p, String permission) { return p.hasPermission(permission); }
+    private boolean hasPermission(Player p, String permission) {
+        return p.hasPermission(permission) || p.hasPermission("support.*");
+    }
 
     // -------------------------------------------------------------------------
     // Persistence

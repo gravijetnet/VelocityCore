@@ -1,4 +1,4 @@
-package net.gravijet.support.discord;
+package net.gravijet.velocity.core.support.discord;
 
 import discord4j.common.util.Snowflake;
 import discord4j.core.DiscordClient;
@@ -21,9 +21,9 @@ import discord4j.core.object.command.ApplicationCommandOption;
 import discord4j.discordjson.json.ApplicationCommandOptionData;
 import discord4j.discordjson.json.ApplicationCommandRequest;
 import discord4j.rest.util.Color;
-import net.gravijet.support.Main;
-import net.gravijet.support.config.Config;
-import net.gravijet.support.manager.SupportManager;
+import net.gravijet.velocity.core.support.SupportPlugin;
+import net.gravijet.velocity.core.support.config.SupportConfig;
+import net.gravijet.velocity.core.support.manager.SupportManager;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -36,8 +36,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DiscordBot {
-    private final Main plugin;
-    private final Config config;
+    private final SupportPlugin plugin;
+    private final SupportConfig config;
     private final SupportManager manager;
     private GatewayDiscordClient client;
 
@@ -52,7 +52,7 @@ public class DiscordBot {
     private final Map<String, String> claimedByUserId = new ConcurrentHashMap<>();
     private final Map<String, String> claimedByName   = new ConcurrentHashMap<>();
 
-    public DiscordBot(Main plugin, Config config, SupportManager manager) {
+    public DiscordBot(SupportPlugin plugin, SupportConfig config, SupportManager manager) {
         this.plugin  = plugin;
         this.config  = config;
         this.manager = manager;
@@ -86,7 +86,7 @@ public class DiscordBot {
 
     private void onReady(ReadyEvent event) {
         plugin.getLogger().info("Discord bot connected as {}.", event.getSelf().getUsername());
-        Config.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
 
         Guild guild = client.getGuildById(Snowflake.of(cfg.allowedGuildId)).block();
         if (guild == null) {
@@ -205,7 +205,7 @@ public class DiscordBot {
     private void onMessageCreate(MessageCreateEvent event) {
         try {
             Message msg = event.getMessage();
-            if (msg.getAuthor().map(u -> u.isBot()).orElse(true)) return;
+            if (msg.getAuthor().map(discord4j.core.object.entity.User::isBot).orElse(true)) return;
 
             TextChannel channel = (TextChannel) msg.getChannel().block();
             if (channel == null) return;
@@ -283,7 +283,7 @@ public class DiscordBot {
     // -------------------------------------------------------------------------
 
     public void createSupportChannel(String playerName, String serverName, String language, String sessionId) {
-        Config.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
         try {
             Guild guild = client.getGuildById(Snowflake.of(cfg.allowedGuildId)).block();
             if (guild == null) return;
@@ -327,7 +327,7 @@ public class DiscordBot {
     public void updateChannelToClaimed(String sessionId, String staffName, String staffDiscordId) {
         TextChannel channel = sessionToChannel.get(sessionId);
         if (channel == null) return;
-        Config.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
         String chId = channel.getId().asString();
 
         String embedId = sessionToEmbedMsgId.get(sessionId);
@@ -371,12 +371,12 @@ public class DiscordBot {
     }
 
     public void sendTransferMessageToChannel(String sessionId, String from, String to) {
-        Config.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
         sendToChannel(sessionId, cfg.transferMessage.replace("{fromStaff}", from).replace("{toStaff}", to));
     }
 
     public void sendStatusMessageToChannel(String sessionId, String status) {
-        Config.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
         sendToChannel(sessionId, cfg.statusMessage.replace("{status}", status));
     }
 
@@ -403,7 +403,7 @@ public class DiscordBot {
     }
 
     public void sendRatingEmbedToChannel(String sessionId, int rating, String playerName, String staffName) {
-        Config.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
         try {
             TextChannel channel = (TextChannel) client.getChannelById(Snowflake.of(cfg.transcriptChannelId)).block();
             if (channel == null) return;
@@ -441,7 +441,7 @@ public class DiscordBot {
     // -------------------------------------------------------------------------
 
     private void sendTranscript(TextChannel channel, String sessionId, String language, String playerName, Instant createdAt) throws Exception {
-        Config.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
         TextChannel transcriptCh = (TextChannel) client.getChannelById(Snowflake.of(cfg.transcriptChannelId)).block();
         if (transcriptCh == null) return;
 
@@ -507,13 +507,13 @@ public class DiscordBot {
     // -------------------------------------------------------------------------
 
     private boolean hasStaffRole(Member member) {
-        Config.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
         List<String> roles = member.getRoles().map(r -> r.getId().asString()).collectList().block();
         return roles != null && roles.stream().anyMatch(r -> r.equals(cfg.staffRoleId) || r.equals(cfg.managementRoleId));
     }
 
     private boolean hasManagementRole(Member member) {
-        Config.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
         List<String> roles = member.getRoles().map(r -> r.getId().asString()).collectList().block();
         return roles != null && roles.stream().anyMatch(r -> r.equals(cfg.managementRoleId));
     }

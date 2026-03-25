@@ -1,4 +1,4 @@
-package net.gravijet.support.model;
+package net.gravijet.velocity.core.support.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;

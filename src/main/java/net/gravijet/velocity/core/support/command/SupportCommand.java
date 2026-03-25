@@ -1,10 +1,10 @@
-package net.gravijet.support.command;
+package net.gravijet.velocity.core.support.command;
 
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
-import net.gravijet.support.Main;
-import net.gravijet.support.config.Config;
-import net.gravijet.support.manager.SupportManager;
+import net.gravijet.velocity.core.support.SupportPlugin;
+import net.gravijet.velocity.core.support.config.SupportConfig;
+import net.gravijet.velocity.core.support.manager.SupportManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
@@ -13,12 +13,12 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class SupportCommand implements SimpleCommand {
-    private final Main plugin;
-    private final Config config;
+    private final SupportPlugin plugin;
+    private final SupportConfig config;
     private final SupportManager manager;
     private final LegacyComponentSerializer serial = LegacyComponentSerializer.legacyAmpersand();
 
-    public SupportCommand(Main plugin) {
+    public SupportCommand(SupportPlugin plugin) {
         this.plugin  = plugin;
         this.config  = plugin.getConfig();
         this.manager = plugin.getManager();

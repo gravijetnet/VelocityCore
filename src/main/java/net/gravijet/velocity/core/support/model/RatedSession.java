@@ -1,4 +1,4 @@
-package net.gravijet.support.model;
+package net.gravijet.velocity.core.support.model;
 
 import java.time.Instant;
 import java.util.UUID;

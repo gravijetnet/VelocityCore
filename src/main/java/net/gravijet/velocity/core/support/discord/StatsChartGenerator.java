@@ -1,6 +1,6 @@
-package net.gravijet.support.discord;
+package net.gravijet.velocity.core.support.discord;
 
-import net.gravijet.support.manager.SupportManager;
+import net.gravijet.velocity.core.support.manager.SupportManager;
 import org.slf4j.Logger;
 
 import javax.imageio.ImageIO;

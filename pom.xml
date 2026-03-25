@@ -9,8 +9,8 @@
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
-    <name>Support Plugin</name>
-    <description>A comprehensive support system with Discord integration and 2FA</description>
+    <name>VelocityCore</name>
+    <description>Unified Velocity core plugin with support system, Discord integration, and player utilities</description>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -66,6 +66,13 @@
             <artifactId>logback-classic</artifactId>
             <version>1.4.11</version>
         </dependency>
+
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>9.1.0</version>
+        </dependency>
+
     </dependencies>
 
     <build>

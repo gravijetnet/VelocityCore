@@ -1,0 +1,123 @@
+package net.gravijet.velocity.core.database;
+
+import net.gravijet.velocity.core.database.models.PlayerData;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+public class PlayerDataDAO {
+
+    private final DatabaseManager databaseManager;
+
+    public PlayerDataDAO(DatabaseManager databaseManager) {
+        this.databaseManager = databaseManager;
+    }
+
+    public CompletableFuture<PlayerData> getPlayerData(UUID uuid) {
+        return CompletableFuture.supplyAsync(() -> {
+            try (Connection connection = databaseManager.getConnection();
+                 PreparedStatement ps = connection.prepareStatement("SELECT * FROM player_data WHERE uuid = ?")) {
+                ps.setString(1, uuid.toString());
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) {
+                    return new PlayerData(
+                            uuid,
+                            rs.getString("username"),
+                            rs.getInt("monthly_tokens"),
+                            rs.getInt("permanent_tokens"),
+                            rs.getInt("last_reset_month"),
+                            rs.getString("color"),
+                            rs.getString("last_server"),
+                            rs.getLong("last_online")
+                    );
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+            return null;
+        });
+    }
+
+    public CompletableFuture<PlayerData> getPlayerDataByName(String name) {
+        return CompletableFuture.supplyAsync(() -> {
+            try (Connection connection = databaseManager.getConnection();
+                 PreparedStatement ps = connection.prepareStatement("SELECT * FROM player_data WHERE username = ?")) {
+                ps.setString(1, name);
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) {
+                    return new PlayerData(
+                            UUID.fromString(rs.getString("uuid")),
+                            rs.getString("username"),
+                            rs.getInt("monthly_tokens"),
+                            rs.getInt("permanent_tokens"),
+                            rs.getInt("last_reset_month"),
+                            rs.getString("color"),
+                            rs.getString("last_server"),
+                            rs.getLong("last_online")
+                    );
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+            return null;
+        });
+    }
+
+    public CompletableFuture<Void> savePlayerData(PlayerData data) {
+        return CompletableFuture.runAsync(() -> {
+            try (Connection connection = databaseManager.getConnection();
+                 PreparedStatement ps = connection.prepareStatement(
+                         "INSERT INTO player_data (uuid, username, monthly_tokens, permanent_tokens, last_reset_month, color, last_server, last_online) " +
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+                                 "ON DUPLICATE KEY UPDATE " +
+                                 "username = VALUES(username), " +
+                                 "monthly_tokens = VALUES(monthly_tokens), " +
+                                 "permanent_tokens = VALUES(permanent_tokens), " +
+                                 "last_reset_month = VALUES(last_reset_month), " +
+                                 "color = VALUES(color), " +
+                                 "last_server = VALUES(last_server), " +
+                                 "last_online = VALUES(last_online)")) {
+
+                ps.setString(1, data.getUuid().toString());
+                ps.setString(2, data.getUsername());
+                ps.setInt(3, data.getMonthlyTokens());
+                ps.setInt(4, data.getPermanentTokens());
+                ps.setInt(5, data.getLastResetMonth());
+                ps.setString(6, data.getColor());
+                ps.setString(7, data.getLastServer());
+                ps.setLong(8, data.getLastOnline());
+                ps.executeUpdate();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    public CompletableFuture<List<PlayerData>> getAllPlayers() {
+        return CompletableFuture.supplyAsync(() -> {
+            List<PlayerData> players = new ArrayList<>();
+            try (Connection connection = databaseManager.getConnection();
+                 PreparedStatement ps = connection.prepareStatement("SELECT * FROM player_data")) {
+                ResultSet rs = ps.executeQuery();
+                while (rs.next()) {
+                    players.add(new PlayerData(
+                            UUID.fromString(rs.getString("uuid")),
+                            rs.getString("username"),
+                            rs.getInt("monthly_tokens"),
+                            rs.getInt("permanent_tokens"),
+                            rs.getInt("last_reset_month"),
+                            rs.getString("color"),
+                            rs.getString("last_server"),
+                            rs.getLong("last_online")
+                    ));
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+            return players;
+        });
+    }
+}

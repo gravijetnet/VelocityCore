@@ -1,4 +1,4 @@
-package net.gravijet.support.util;
+package net.gravijet.velocity.core.support.util;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

@@ -1,4 +1,4 @@
-package net.gravijet.support.config;
+package net.gravijet.velocity.core.support.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -10,14 +10,14 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
-public class Config {
+public class SupportConfig {
     private final Path dataDirectory;
     private final File configFile;
     private final ObjectMapper mapper;
     private ConfigData configData;
-    private static final Logger logger = LoggerFactory.getLogger(Config.class);
+    private static final Logger logger = LoggerFactory.getLogger(SupportConfig.class);
 
-    public Config(Path dataDirectory) {
+    public SupportConfig(Path dataDirectory) {
         this.dataDirectory = dataDirectory;
         this.configFile = new File(dataDirectory.toFile(), "config.json");
         this.mapper = new ObjectMapper();
@@ -59,15 +59,14 @@ public class Config {
         public Permissions permissions = new Permissions();
 
         public List<String> mainCommandMessage = Arrays.asList(
-                "&c&lSupport",
-                "&4● &c/support de &7» &fOpen a request in German.",
-                "&4● &c/support en &7» &fOpen a request in English.",
+                "&c&lGraviJet &7» &f&lSupport &8- &7Usage",
+                "&4● &c/support <language> &7» &fOpen a request in your prefered language. (DE/EN)",
                 "&4● &c/support chat <message> &7» &fSend a message in your session.",
                 "&4● &c/support rate <1-5> &7» &fRate your support session."
-        );
+                );
 
         public List<String> staffHelpMessage = Arrays.asList(
-                "&c&lSupport &7(Staff)",
+                "&c&lGraviJet &7» &f&lSupport &8- &7Usage",
                 "&4● &c/support claim <player> [--force] &7» &fClaim a support request.",
                 "&4● &c/support chat <message> &7» &fSend a message in the session.",
                 "&4● &c/support close &7» &fClose the current session.",
@@ -85,6 +84,7 @@ public class Config {
         public String supportRequestSent         = "&7Your request has been sent. A staff member will respond shortly.";
         public String supportRequestReceived     = "&7New support request from &f{player} &7on &f{server} &8({language})";
         public String noActiveSupport            = "&cYou do not have an active support session.";
+        public String alreadyInSession           = "&cYou already have an open support request.";
         public String supportAlreadyClaimed      = "&cThis session is already being handled by &f{staff}&c.";
         public String supportClaimed             = "&7You are now assisting &f{player}&7.";
         public String supportClaimedPlayer       = "&7A staff member has joined your session.";
@@ -120,6 +120,7 @@ public class Config {
         public String playerOfflineStatus        = "&f{player} &7has gone offline.";
 
         public static class GermanMessages {
+            public String alreadyInSession        = "&cDu hast bereits eine offene Support-Anfrage.";
             public String supportRequestSent      = "&7Deine Anfrage wurde gesendet. Ein Teammitglied meldet sich gleich.";
             public String noActiveSupport         = "&cDu hast keine aktive Support-Anfrage.";
             public String supportClaimedPlayer    = "&7Ein Teammitglied hat deine Sitzung angenommen.";
@@ -188,12 +189,13 @@ public class Config {
     public List<String> getMainCommandMessage() { return configData.mainCommandMessage; }
     public List<String> getStaffHelpMessage() { return configData.staffHelpMessage; }
 
-    private boolean de(String lang) { return "de".equalsIgnoreCase(lang) || "DE".equals(lang); }
+    private boolean de(String lang) { return "de".equalsIgnoreCase(lang); }
 
     public String getInvalidLanguage()     { return configData.invalidLanguage; }
     public String getSupportRequestSent(String lang) { return de(lang) ? configData.de.supportRequestSent : configData.supportRequestSent; }
     public String getSupportRequestReceived() { return configData.supportRequestReceived; }
-    public String getNoActiveSupport(String lang) { return de(lang) ? configData.de.noActiveSupport : configData.noActiveSupport; }
+    public String getNoActiveSupport(String lang)   { return de(lang) ? configData.de.noActiveSupport : configData.noActiveSupport; }
+    public String getAlreadyInSession(String lang)  { return de(lang) ? configData.de.alreadyInSession : configData.alreadyInSession; }
     public String getSupportAlreadyClaimed()   { return configData.supportAlreadyClaimed; }
     public String getSupportClaimed()          { return configData.supportClaimed; }
     public String getSupportClaimedPlayer(String lang) { return de(lang) ? configData.de.supportClaimedPlayer : configData.supportClaimedPlayer; }
