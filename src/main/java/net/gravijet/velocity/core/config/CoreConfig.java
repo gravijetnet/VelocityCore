@@ -74,11 +74,11 @@ public class CoreConfig {
         // ── Tokens ────────────────────────────────────────────────────────────
         public List<String> tokensInfo = Arrays.asList(
                 "&c&lGraviJet &7\u00bb &f&lJoinMe Tokens",
-                "&7Status&8:    &f{status}",
-                "&7Total&8:     &f{total}",
-                "&7Monthly&8:   &f{monthly} &8(&7resets monthly&8)",
-                "&7Permanent&8: &f{permanent} &8(&7never expires&8)",
-                "&7Cooldown&8:  &f{cooldown}"
+                "&cStatus&8:    &f{status}",
+                "&cTotal&8:     &f{total}",
+                "&cMonthly&8:   &f{monthly} &8(&7resets monthly&8)",
+                "&cPermanent&8: &f{permanent} &8(&7never expires&8)",
+                "&cCooldown&8:  &f{cooldown}"
         );
         public String tokensStoreLink        = "&7Buy more tokens at &example.invalid&7.";
         public String tokensError            = "&cFailed to load token data.";
@@ -108,8 +108,8 @@ public class CoreConfig {
         public String adminAmountClamped  = "&7Note: amount clamped to maximum.";
 
         // ── Ping ──────────────────────────────────────────────────────────────
-        public String pingSelf    = "&8\u00bb &7Ping&8: {color}{ping}ms";
-        public String pingOther   = "&8\u00bb &7Ping &8- &f{player}&8: {color}{ping}ms";
+        public String pingSelf    = "&8\u00bb &cPing&8: {color}{ping}ms";
+        public String pingOther   = "&8\u00bb &cPing &8- &f{player}&8: {color}{ping}ms";
         public String pingConsole = "&cConsole must specify a player.";
 
         // ── Find ──────────────────────────────────────────────────────────────
