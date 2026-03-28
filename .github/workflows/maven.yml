@@ -1,4 +1,4 @@
-name: Build VelocityCore
+name: Build and Release VelocityCore
 
 on:
   push:
@@ -9,12 +9,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write # WICHTIG: Erlaubt das Erstellen von Releases
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
@@ -26,24 +24,21 @@ jobs:
     - name: Build with Maven
       run: mvn -B package --file pom.xml
 
-    - name: Move JAR to root and Commit
+    - name: Prepare JAR for Release
       run: |
-        # Sucht die VelocityCore JAR, ignoriert shaded/sources/javadoc
+        # Findet die richtige JAR
         JAR_PATH=$(find target/ -name "VelocityCore-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
-        
-        if [ -z "$JAR_PATH" ]; then
-          echo "Fehler: Keine VelocityCore JAR gefunden!"
-          exit 1
-        fi
-        
-        echo "Gefundene Datei: $JAR_PATH"
-        mv "$JAR_PATH" ./velocitycore-latest.jar
-        
-        # Git Bot konfigurieren
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        
-        # Datei hinzufügen (auch wenn in .gitignore)
-        git add -f velocitycore-latest.jar
-        git commit -m "Update VelocityCore JAR [skip ci]" || echo "No changes to commit"
-        git push
+        # Kopiert sie mit einem festen Namen für das Release
+        cp "$JAR_PATH" ./velocitycore-latest.jar
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: latest
+        name: "Latest Build"
+        body: "Automatischer Build vom ${{ github.event.head_commit.timestamp }}"
+        draft: false
+        prerelease: false
+        files: velocitycore-latest.jar
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
