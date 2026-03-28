@@ -29,7 +29,7 @@ jobs:
 
     - name: Prepare JAR
       run: |
-        # Find the JAR, excluding shaded/sources/javadoc
+        # Find the VelocityCore JAR, excluding shaded/sources/javadoc
         JAR_PATH=$(find target/ -name "VelocityCore-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
         
         if [ -z "$JAR_PATH" ]; then 
@@ -37,29 +37,30 @@ jobs:
           exit 1; 
         fi
         
-        # Create a unique filename for the permanent archive
+        # Create a unique filename for the archive
         cp "$JAR_PATH" ./velocitycore-build-${{ github.run_number }}.jar
-        # Create a static filename for the 'latest' link
+        # Create a static filename for the latest release
         cp "$JAR_PATH" ./velocitycore-latest.jar
 
-    # Step 1: Create a PERMANENT release for this specific build
+    # Step 1: Permanent Archive (Unique Build Tag)
     - name: Create Archive Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: build-${{ github.run_number }}
         name: "VelocityCore Build #${{ github.run_number }}"
-        body: "Permanent archive of Build #${{ github.run_number }}"
+        body: "Permanent archive of Build #${{ github.run_number }}. Includes source at this state."
         files: velocitycore-build-${{ github.run_number }}.jar
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # Step 2: Update the LATEST release (Overwrites the file so it stays clean)
+    # Step 2: Update Latest Release (Syncs JAR and Source Code)
     - name: Update Latest Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: latest
         name: "VelocityCore Latest Build"
-        body: "This is the most recent successful build (#${{ github.run_number }})."
+        body: "This release always contains the NEWEST JAR and the NEWEST Source Code from the main branch."
+        # This moves the 'latest' tag to the current commit
         make_latest: true
         files: velocitycore-latest.jar
       env:
