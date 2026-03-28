@@ -80,7 +80,7 @@ public class Core {
 
             logger.info("[VelocityCore] Successfully initialized.");
         } catch (Exception e) {
-            logger.error("Failed to initialize VelocityCore", e);
+            logger.error("Failed to initialize VelocityCore:", e);
             shutdown();
         }
     }
