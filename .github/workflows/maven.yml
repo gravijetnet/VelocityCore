@@ -28,24 +28,29 @@ jobs:
 
     - name: Prepare JAR
       run: |
+        # Find the JAR, excluding shaded/sources/javadoc
         JAR_PATH=$(find target/ -name "VelocityCore-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
-        if [ -z "$JAR_PATH" ]; then echo "JAR not found"; exit 1; fi
+        
+        if [ -z "$JAR_PATH" ]; then 
+          echo "Error: VelocityCore JAR not found"; 
+          exit 1; 
+        fi
+        
+        # Create a unique filename for this build
         cp "$JAR_PATH" ./velocitycore-build-${{ github.run_number }}.jar
 
-    # Step 1: Create a UNIQUE release for this specific build
-    # This will NOT overwrite previous releases.
+    # Step 1: Create a UNIQUE release for this build number
     - name: Create Unique Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: build-${{ github.run_number }}
         name: "VelocityCore Build #${{ github.run_number }}"
-        body: "Permanent archive of Build #${{ github.run_number }} \nCommit: ${{ github.sha }}"
-        files: velocitycore-build-${{ github.run_number *.jar
+        body: "Permanent archive of VelocityCore Build #${{ github.run_number }} \nCommit: ${{ github.sha }}"
+        files: velocitycore-build-${{ github.run_number }}.jar
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # Step 2: Update the "latest" release with the same file
-    # This WILL overwrite the 'latest' tag so people always have one stable link.
+    # Step 2: Update the "latest" release
     - name: Update Latest Release
       uses: softprops/action-gh-release@v2
       with:
