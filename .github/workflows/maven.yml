@@ -36,7 +36,7 @@ jobs:
       with:
         tag_name: latest
         name: "Latest Build"
-        body: "Automatischer Build vom ${{ github.event.head_commit.timestamp }}"
+        body: "Automatic build from ${{ github.event.head_commit.timestamp }}"
         draft: false
         prerelease: false
         files: velocitycore-latest.jar
