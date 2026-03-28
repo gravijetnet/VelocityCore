@@ -103,7 +103,7 @@ public class Core {
             }
         });
 
-        // Support: log connection & notify support manager
+
         if (supportPlugin != null) supportPlugin.handlePlayerLeave(event.getPlayer());
     }
 
