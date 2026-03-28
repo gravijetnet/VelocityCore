@@ -7,6 +7,7 @@ import discord4j.core.event.domain.interaction.ButtonInteractionEvent;
 import discord4j.core.event.domain.interaction.ChatInputInteractionEvent;
 import discord4j.core.event.domain.lifecycle.ReadyEvent;
 import discord4j.core.event.domain.message.MessageCreateEvent;
+import discord4j.core.object.command.ApplicationCommandOption;
 import discord4j.core.object.component.ActionRow;
 import discord4j.core.object.component.Button;
 import discord4j.core.object.entity.Guild;
@@ -17,13 +18,14 @@ import discord4j.core.object.entity.channel.TextChannel;
 import discord4j.core.spec.EmbedCreateSpec;
 import discord4j.core.spec.MessageCreateSpec;
 import discord4j.core.spec.TextChannelCreateSpec;
-import discord4j.core.object.command.ApplicationCommandOption;
 import discord4j.discordjson.json.ApplicationCommandOptionData;
 import discord4j.discordjson.json.ApplicationCommandRequest;
 import discord4j.rest.util.Color;
 import net.gravijet.velocity.core.support.SupportPlugin;
 import net.gravijet.velocity.core.support.config.SupportConfig;
 import net.gravijet.velocity.core.support.manager.SupportManager;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -66,10 +68,14 @@ public class DiscordBot {
                 plugin.getLogger().error("Discord login failed.");
                 return;
             }
-            client.on(ReadyEvent.class).subscribe(this::onReady);
-            client.on(ButtonInteractionEvent.class).subscribe(this::onButtonInteraction);
-            client.on(MessageCreateEvent.class).subscribe(this::onMessageCreate);
-            client.on(ChatInputInteractionEvent.class).subscribe(this::onSlashCommand);
+            // Use reactive handler pattern — handlers return Mono<Void> so Discord4J
+            // can properly propagate errors and backpressure instead of blocking the
+            // event-dispatch thread.
+            client.on(ReadyEvent.class,
+                    e -> Mono.fromRunnable(() -> onReady(e)).subscribeOn(Schedulers.boundedElastic())).subscribe();
+            client.on(ButtonInteractionEvent.class, this::onButtonInteraction).subscribe();
+            client.on(MessageCreateEvent.class,     this::onMessageCreate).subscribe();
+            client.on(ChatInputInteractionEvent.class, this::onSlashCommand).subscribe();
             plugin.getLogger().info("Discord bot started.");
         } catch (Exception e) {
             plugin.getLogger().error("Failed to start Discord bot.", e);
@@ -81,7 +87,7 @@ public class DiscordBot {
     }
 
     // -------------------------------------------------------------------------
-    // Ready
+    // Ready (runs on boundedElastic — blocking OK)
     // -------------------------------------------------------------------------
 
     private void onReady(ReadyEvent event) {
@@ -119,127 +125,141 @@ public class DiscordBot {
     }
 
     // -------------------------------------------------------------------------
-    // Button interactions
+    // Button interactions — fully reactive; blocking work on boundedElastic
     // -------------------------------------------------------------------------
 
-    private void onButtonInteraction(ButtonInteractionEvent event) {
-        event.deferReply().withEphemeral(true).subscribe();
-        try {
-            Member member = event.getInteraction().getMember().orElse(null);
-            if (member == null) {
-                event.createFollowup("This button can only be used by server members.").withEphemeral(true).subscribe();
-                return;
-            }
-            if (!hasStaffRole(member)) {
-                event.createFollowup("You do not have permission to use support buttons.").withEphemeral(true).subscribe();
-                return;
-            }
-            String id = event.getCustomId();
-            if      (id.startsWith("claim_")) handleClaimButton(event, member);
-            else if (id.startsWith("close_")) handleCloseButton(event, member);
-        } catch (Exception e) {
-            plugin.getLogger().error("Error handling button interaction.", e);
-            event.createFollowup("An internal error occurred.").withEphemeral(true).subscribe();
+    private Mono<Void> onButtonInteraction(ButtonInteractionEvent event) {
+        Member member = event.getInteraction().getMember().orElse(null);
+        if (member == null) {
+            return event.deferReply().withEphemeral(true)
+                    .then(event.createFollowup("This button can only be used by server members.")
+                            .withEphemeral(true).then());
         }
+
+        // deferReply must complete before any blocking work
+        return event.deferReply().withEphemeral(true)
+                .then(hasStaffRoleMono(member))
+                .flatMap(hasRole -> {
+                    if (!hasRole) {
+                        return event.createFollowup("You do not have permission to use support buttons.")
+                                .withEphemeral(true).then();
+                    }
+                    String id = event.getCustomId();
+                    if (id.startsWith("claim_")) return handleClaimButton(event, member);
+                    if (id.startsWith("close_")) return handleCloseButton(event, member);
+                    return Mono.empty();
+                })
+                .onErrorResume(e -> {
+                    plugin.getLogger().error("Error handling button interaction.", e);
+                    return event.createFollowup("An internal error occurred.").withEphemeral(true).then();
+                });
     }
 
-    private void handleClaimButton(ButtonInteractionEvent event, Member member) {
-        String channelId = event.getCustomId().substring(6);
-        if (claimedByUserId.containsKey(channelId)) {
-            String claimer = claimedByName.getOrDefault(channelId, "someone");
-            event.createFollowup(config.getDiscordSettings().alreadyClaimedMessage.replace("{staff}", claimer))
-                    .withEphemeral(true).subscribe();
-            return;
-        }
-
-        String sessionId = channelToSession.get(channelId);
-        if (sessionId == null) {
-            event.createFollowup("No active support session found for this channel.").withEphemeral(true).subscribe();
-            return;
-        }
-
-        String playerName = channelToPlayer.get(channelId);
-        if (playerName == null) {
-            TextChannel ch = (TextChannel) client.getChannelById(Snowflake.of(channelId)).block();
-            playerName = ch != null ? extractFromChannelName(ch.getName(), 2) : "unknown";
-        }
-
-        String discordId      = member.getId().asString();
-        String linkedMcName   = manager.getLinkedMinecraftName(discordId);
-        String claimName      = linkedMcName != null ? linkedMcName : member.getDisplayName();
-        boolean ok = manager.claimSupportFromDiscord(discordId, claimName, playerName, false);
-        if (ok) {
-            claimedByUserId.put(channelId, member.getId().asString());
-            claimedByName.put(channelId, claimName);
-            discordStaffSession.put(member.getId().asString(), sessionId);
-            updateChannelToClaimed(sessionId, claimName, member.getId().asString());
-            event.createFollowup("You have claimed this support request.").withEphemeral(true).subscribe();
-        } else {
-            event.createFollowup("Could not claim the support request.").withEphemeral(true).subscribe();
-        }
-    }
-
-    private void handleCloseButton(ButtonInteractionEvent event, Member member) {
-        String channelId = event.getCustomId().substring(6);
-        String claimerUserId = claimedByUserId.get(channelId);
-
-        if (claimerUserId == null || !claimerUserId.equals(member.getId().asString())) {
-            if (!hasManagementRole(member)) {
-                event.createFollowup(config.getDiscordSettings().onlyClaimerCanClose).withEphemeral(true).subscribe();
-                return;
+    // Runs on boundedElastic — .block() calls inside are safe
+    private Mono<Void> handleClaimButton(ButtonInteractionEvent event, Member member) {
+        return Mono.fromCallable(() -> {
+            String channelId = event.getCustomId().substring(6);
+            if (claimedByUserId.containsKey(channelId)) {
+                String claimer = claimedByName.getOrDefault(channelId, "someone");
+                return config.getDiscordSettings().alreadyClaimedMessage.replace("{staff}", claimer);
             }
-        }
 
-        boolean ok = manager.closeSupportSessionFromDiscord(member.getId().asString());
-        if (!ok) {
-            // Try with claimerUserId if member is management overriding
-            ok = claimerUserId != null && manager.closeSupportSessionFromDiscord(claimerUserId);
-        }
-        event.createFollowup(ok ? "Support session closed." : "Could not close the session.").withEphemeral(true).subscribe();
-    }
-
-    // -------------------------------------------------------------------------
-    // Message create (Discord -> Minecraft relay)
-    // -------------------------------------------------------------------------
-
-    private void onMessageCreate(MessageCreateEvent event) {
-        try {
-            Message msg = event.getMessage();
-            if (msg.getAuthor().map(discord4j.core.object.entity.User::isBot).orElse(true)) return;
-
-            TextChannel channel = (TextChannel) msg.getChannel().block();
-            if (channel == null) return;
-
-            String channelId = channel.getId().asString();
             String sessionId = channelToSession.get(channelId);
-            if (sessionId == null) return;
+            if (sessionId == null) return "No active support session found for this channel.";
 
-            if (!claimedByUserId.containsKey(channelId)) {
-                msg.delete().subscribe();
-                channel.createMessage(config.getDiscordSettings().pleaseClaimMessage).subscribe();
-                return;
+            String playerName = channelToPlayer.get(channelId);
+            if (playerName == null) {
+                TextChannel ch = (TextChannel) client.getChannelById(Snowflake.of(channelId)).block();
+                playerName = ch != null ? extractFromChannelName(ch.getName(), 2) : "unknown";
             }
 
-            Member member = msg.getAuthorAsMember().block();
-            if (member == null) return;
+            String discordId    = member.getId().asString();
+            String linkedMcName = manager.getLinkedMinecraftName(discordId);
+            String claimName    = linkedMcName != null ? linkedMcName : member.getDisplayName();
 
-            manager.handleSupportChatFromDiscord(member.getId().asString(), msg.getContent());
-        } catch (Exception e) {
-            plugin.getLogger().error("Error processing Discord message.", e);
-        }
+            boolean ok = manager.claimSupportFromDiscord(discordId, claimName, playerName, false);
+            if (ok) {
+                claimedByUserId.put(channelId, discordId);
+                claimedByName.put(channelId, claimName);
+                discordStaffSession.put(discordId, sessionId);
+                updateChannelToClaimed(sessionId, claimName, discordId);
+                return "You have claimed this support request.";
+            }
+            return "Could not claim the support request.";
+        }).subscribeOn(Schedulers.boundedElastic())
+                .flatMap(msg -> event.createFollowup(msg).withEphemeral(true).then());
+    }
+
+    // Runs on boundedElastic — .block() calls inside are safe
+    private Mono<Void> handleCloseButton(ButtonInteractionEvent event, Member member) {
+        return Mono.fromCallable(() -> {
+            String channelId     = event.getCustomId().substring(6);
+            String claimerUserId = claimedByUserId.get(channelId);
+
+            if (claimerUserId == null || !claimerUserId.equals(member.getId().asString())) {
+                if (!hasManagementRole(member)) {
+                    return config.getDiscordSettings().onlyClaimerCanClose;
+                }
+            }
+
+            boolean ok = manager.closeSupportSessionFromDiscord(member.getId().asString());
+            if (!ok && claimerUserId != null) {
+                ok = manager.closeSupportSessionFromDiscord(claimerUserId);
+            }
+            return ok ? "Support session closed." : "Could not close the session.";
+        }).subscribeOn(Schedulers.boundedElastic())
+                .flatMap(msg -> event.createFollowup(msg).withEphemeral(true).then());
     }
 
     // -------------------------------------------------------------------------
-    // Slash commands
+    // Message create (Discord -> Minecraft relay) — fully reactive, no blocking
     // -------------------------------------------------------------------------
 
-    private void onSlashCommand(ChatInputInteractionEvent event) {
-        if (!"stats".equals(event.getCommandName())) return;
+    private Mono<Void> onMessageCreate(MessageCreateEvent event) {
+        Message msg = event.getMessage();
+        if (msg.getAuthor().map(discord4j.core.object.entity.User::isBot).orElse(true)) {
+            return Mono.empty();
+        }
+
+        return msg.getChannel()
+                .ofType(TextChannel.class)
+                .flatMap(channel -> {
+                    String channelId = channel.getId().asString();
+                    String sessionId = channelToSession.get(channelId);
+                    if (sessionId == null) return Mono.empty();
+
+                    if (!claimedByUserId.containsKey(channelId)) {
+                        return msg.delete()
+                                .then(channel.createMessage(config.getDiscordSettings().pleaseClaimMessage))
+                                .then();
+                    }
+
+                    return msg.getAuthorAsMember()
+                            .doOnNext(member ->
+                                    manager.handleSupportChatFromDiscord(member.getId().asString(), msg.getContent()))
+                            .then();
+                })
+                .onErrorResume(e -> {
+                    plugin.getLogger().error("Error processing Discord message.", e);
+                    return Mono.empty();
+                });
+    }
+
+    // -------------------------------------------------------------------------
+    // Slash commands — reactive; chart generation on boundedElastic
+    // -------------------------------------------------------------------------
+
+    private Mono<Void> onSlashCommand(ChatInputInteractionEvent event) {
+        if (!"stats".equals(event.getCommandName())) return Mono.empty();
 
         Member member = event.getInteraction().getMember().orElse(null);
-        if (member == null || !hasStaffRole(member)) {
-            event.reply("You do not have permission to use this command.").withEphemeral(true).subscribe();
-            return;
+        if (member == null) {
+            return event.reply("You do not have permission to use this command.").withEphemeral(true).then();
+        }
+
+        int total = manager.getTotalRatedCount();
+        if (total == 0) {
+            return event.reply("No ratings have been submitted yet.").withEphemeral(true).then();
         }
 
         boolean visible = event.getOption("visible")
@@ -247,39 +267,44 @@ public class DiscordBot {
                 .map(v -> v.asBoolean())
                 .orElse(false);
 
-        int total = manager.getTotalRatedCount();
-        if (total == 0) {
-            event.reply("No ratings have been submitted yet.").withEphemeral(true).subscribe();
-            return;
-        }
-
-        event.deferReply().withEphemeral(!visible).block();
-        try {
-            Map<String, SupportManager.StaffStats> staffStats = manager.buildStaffStats();
-            double avg = manager.getGlobalAverageRating();
-
-            File chart = StatsChartGenerator.generate(staffStats, avg, total, plugin.getLogger());
-            if (chart != null) {
-                event.editReply()
-                        .withContentOrNull(null)
-                        .block();
-                event.createFollowup()
-                        .withEphemeral(!visible)
-                        .withFiles(discord4j.core.spec.MessageCreateFields.File.of(
-                                "stats.png", Files.newInputStream(chart.toPath())))
-                        .block();
-                chart.delete();
-            } else {
-                event.editReply().withContent("Failed to generate chart.").block();
-            }
-        } catch (Exception e) {
-            plugin.getLogger().error("Error handling /stats command.", e);
-            event.editReply().withContent("Failed to load statistics.").block();
-        }
+        return hasStaffRoleMono(member)
+                .flatMap(hasRole -> {
+                    if (!hasRole) {
+                        return event.reply("You do not have permission to use this command.")
+                                .withEphemeral(true).then();
+                    }
+                    return event.deferReply().withEphemeral(!visible)
+                            .then(Mono.fromCallable(() -> {
+                                Map<String, SupportManager.StaffStats> staffStats = manager.buildStaffStats();
+                                double avg = manager.getGlobalAverageRating();
+                                return StatsChartGenerator.generate(staffStats, avg, total, plugin.getLogger());
+                            }).subscribeOn(Schedulers.boundedElastic()))
+                            .flatMap(chart -> {
+                                if (chart == null) {
+                                    return event.editReply().withContent("Failed to generate chart.").then();
+                                }
+                                try {
+                                    return event.editReply().withContentOrNull(null)
+                                            .then(event.createFollowup()
+                                                    .withEphemeral(!visible)
+                                                    .withFiles(discord4j.core.spec.MessageCreateFields.File.of(
+                                                            "stats.png", Files.newInputStream(chart.toPath())))
+                                                    .then())
+                                            .doFinally(s -> chart.delete());
+                                } catch (Exception e) {
+                                    plugin.getLogger().error("Error sending stats chart.", e);
+                                    return event.editReply().withContent("Failed to load statistics.").then();
+                                }
+                            })
+                            .onErrorResume(e -> {
+                                plugin.getLogger().error("Error handling /stats command.", e);
+                                return event.editReply().withContent("Failed to load statistics.").then();
+                            });
+                });
     }
 
     // -------------------------------------------------------------------------
-    // Public API for SupportManager
+    // Public API for SupportManager (called from Velocity threads — blocking OK)
     // -------------------------------------------------------------------------
 
     public void createSupportChannel(String playerName, String serverName, String language, String sessionId) {
@@ -303,10 +328,10 @@ public class DiscordBot {
             EmbedCreateSpec embed = EmbedCreateSpec.builder()
                     .color(parseColor(cfg.openColor))
                     .title("Support Request")
-                    .addField("Player",   playerName,              true)
-                    .addField("Server",   serverName,              true)
-                    .addField("Language", language.toUpperCase(),  true)
-                    .addField("Status",   "Open",                  true)
+                    .addField("Player",   playerName,             true)
+                    .addField("Server",   serverName,             true)
+                    .addField("Language", language.toUpperCase(), true)
+                    .addField("Status",   "Open",                 true)
                     .timestamp(Instant.now())
                     .build();
 
@@ -337,9 +362,9 @@ public class DiscordBot {
                 EmbedCreateSpec newEmbed = EmbedCreateSpec.builder()
                         .color(parseColor(cfg.claimedColor))
                         .title("Support Request")
-                        .addField("Player",  channelToPlayer.getOrDefault(chId, "?"), true)
-                        .addField("Staff",   staffName,                               true)
-                        .addField("Status",  "Claimed",                               true)
+                        .addField("Player", channelToPlayer.getOrDefault(chId, "?"), true)
+                        .addField("Staff",  staffName,                               true)
+                        .addField("Status", "Claimed",                               true)
                         .timestamp(Instant.now())
                         .build();
                 msg.edit()
@@ -411,9 +436,9 @@ public class DiscordBot {
             EmbedCreateSpec embed = EmbedCreateSpec.builder()
                     .color(ratingColor(rating))
                     .title("New Rating")
-                    .addField("Player",       playerName,      true)
-                    .addField("Staff Member", staffName,       true)
-                    .addField("Rating",       rating + " / 5", true)
+                    .addField("Player",       playerName,       true)
+                    .addField("Staff Member", staffName,        true)
+                    .addField("Rating",       rating + " / 5",  true)
                     .timestamp(Instant.now())
                     .build();
 
@@ -423,7 +448,6 @@ public class DiscordBot {
         }
     }
 
-    // Kept for compatibility
     public String getSessionIdByDiscordStaff(String discordId) {
         return discordStaffSession.get(discordId);
     }
@@ -476,7 +500,11 @@ public class DiscordBot {
                             LocalDateTime.ofInstant(createdAt, ZoneId.systemDefault())));
             File f = new File(logDir, fname);
 
-            List<Message> messages = channel.getMessagesBefore(Snowflake.of(Instant.now())).collectList().block();
+            // Limit to 500 messages to prevent OOM on long-running channels
+            List<Message> messages = channel.getMessagesBefore(Snowflake.of(Instant.now()))
+                    .take(500)
+                    .collectList()
+                    .block();
             if (messages == null) return null;
             Collections.reverse(messages);
 
@@ -503,20 +531,35 @@ public class DiscordBot {
     }
 
     // -------------------------------------------------------------------------
-    // Helpers
+    // Role helpers
     // -------------------------------------------------------------------------
 
-    private boolean hasStaffRole(Member member) {
+    /** Non-blocking reactive role check — use in reactive chains. */
+    private Mono<Boolean> hasStaffRoleMono(Member member) {
         SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
-        List<String> roles = member.getRoles().map(r -> r.getId().asString()).collectList().block();
-        return roles != null && roles.stream().anyMatch(r -> r.equals(cfg.staffRoleId) || r.equals(cfg.managementRoleId));
+        return member.getRoles()
+                .any(r -> r.getId().asString().equals(cfg.staffRoleId)
+                        || r.getId().asString().equals(cfg.managementRoleId));
     }
 
+    /** Blocking role check (uses .any() to short-circuit) — safe on boundedElastic threads. */
+    private boolean hasStaffRole(Member member) {
+        Boolean result = hasStaffRoleMono(member).block();
+        return Boolean.TRUE.equals(result);
+    }
+
+    /** Blocking management-role check — safe on boundedElastic threads. */
     private boolean hasManagementRole(Member member) {
         SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
-        List<String> roles = member.getRoles().map(r -> r.getId().asString()).collectList().block();
-        return roles != null && roles.stream().anyMatch(r -> r.equals(cfg.managementRoleId));
+        Boolean result = member.getRoles()
+                .any(r -> r.getId().asString().equals(cfg.managementRoleId))
+                .block();
+        return Boolean.TRUE.equals(result);
     }
+
+    // -------------------------------------------------------------------------
+    // Misc helpers
+    // -------------------------------------------------------------------------
 
     private Color parseColor(String s) {
         return switch (s == null ? "" : s.toUpperCase()) {

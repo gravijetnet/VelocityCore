@@ -25,6 +25,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class SupportManager {
@@ -35,6 +37,11 @@ public class SupportManager {
     private final LegacyComponentSerializer serializer = LegacyComponentSerializer.legacyAmpersand();
     private final DateTimeFormatter logFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private ScheduledTask autoCloseTask;
+    private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "support-io");
+        t.setDaemon(true);
+        return t;
+    });
 
     // Active sessions
     private final Map<UUID, SupportSession> activeSessions       = new ConcurrentHashMap<>();
@@ -83,6 +90,7 @@ public class SupportManager {
 
     public void shutdown() {
         if (autoCloseTask != null) autoCloseTask.cancel();
+        ioExecutor.shutdown();
     }
 
     private void checkInactiveSessions() {
@@ -715,11 +723,14 @@ public class SupportManager {
     }
 
     private void saveBans() {
-        try {
-            mapper.writerWithDefaultPrettyPrinter().writeValue(bansFile, bans.values().toArray(new BanEntry[0]));
-        } catch (IOException e) {
-            plugin.getLogger().error("Failed to save bans.json", e);
-        }
+        BanEntry[] snapshot = bans.values().toArray(new BanEntry[0]);
+        ioExecutor.execute(() -> {
+            try {
+                mapper.writerWithDefaultPrettyPrinter().writeValue(bansFile, snapshot);
+            } catch (IOException e) {
+                plugin.getLogger().error("Failed to save bans.json", e);
+            }
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -746,13 +757,15 @@ public class SupportManager {
     }
 
     private void appendLog(String filename, String content) {
-        try {
-            Path dir = plugin.getDataDirectory().resolve("logs");
-            Files.createDirectories(dir);
-            Files.writeString(dir.resolve(filename), content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (IOException e) {
-            plugin.getLogger().warn("Failed to write log file {}: {}", filename, e.getMessage());
-        }
+        Path dir = plugin.getDataDirectory().resolve("logs");
+        ioExecutor.execute(() -> {
+            try {
+                Files.createDirectories(dir);
+                Files.writeString(dir.resolve(filename), content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            } catch (IOException e) {
+                plugin.getLogger().warn("Failed to write log file {}: {}", filename, e.getMessage());
+            }
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -793,11 +806,14 @@ public class SupportManager {
     }
 
     private void saveLinkedAccounts() {
-        try {
-            mapper.writerWithDefaultPrettyPrinter().writeValue(linkedAccountsFile, linkedAccounts);
-        } catch (IOException e) {
-            plugin.getLogger().error("Failed to save linked_accounts.json", e);
-        }
+        Map<String, String> snapshot = new HashMap<>(linkedAccounts);
+        ioExecutor.execute(() -> {
+            try {
+                mapper.writerWithDefaultPrettyPrinter().writeValue(linkedAccountsFile, snapshot);
+            } catch (IOException e) {
+                plugin.getLogger().error("Failed to save linked_accounts.json", e);
+            }
+        });
     }
 
     // -------------------------------------------------------------------------

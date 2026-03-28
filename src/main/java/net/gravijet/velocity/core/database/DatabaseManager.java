@@ -1,21 +1,34 @@
 package net.gravijet.velocity.core.database;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import net.gravijet.velocity.core.Core;
 
 import java.sql.*;
 
 public class DatabaseManager {
-    private final String url = "jdbc:mysql://localhost:3306/velocity";
-    private final String username = "velocity";
-    private final String password = "velocity";
+    private final HikariDataSource dataSource;
 
     public DatabaseManager() {
+        HikariConfig cfg = new HikariConfig();
+        cfg.setJdbcUrl("jdbc:mysql://localhost:3306/velocity");
+        cfg.setUsername("velocity");
+        cfg.setPassword("velocity");
+        cfg.setMaximumPoolSize(10);
+        cfg.setMinimumIdle(2);
+        cfg.setConnectionTimeout(30_000);
+        cfg.setIdleTimeout(600_000);
+        cfg.setMaxLifetime(1_800_000);
+        cfg.addDataSourceProperty("cachePrepStmts", "true");
+        cfg.addDataSourceProperty("prepStmtCacheSize", "250");
+        cfg.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+        cfg.addDataSourceProperty("useServerPrepStmts", "true");
+        this.dataSource = new HikariDataSource(cfg);
         initializeDatabase();
     }
 
     private void initializeDatabase() {
         try (Connection connection = getConnection()) {
-            // Player Data Table
             connection.prepareStatement("CREATE TABLE IF NOT EXISTS player_data (" +
                     "uuid VARCHAR(100) PRIMARY KEY, " +
                     "username VARCHAR(100), " +
@@ -42,11 +55,15 @@ public class DatabaseManager {
                 connection.prepareStatement("ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + columnDefinition).executeUpdate();
             }
         } catch (SQLException e) {
-            // Ignore errors, might be because column already exists
+            // Column already exists or other non-critical error
         }
     }
 
     public Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(url, username, password);
+        return dataSource.getConnection();
+    }
+
+    public void close() {
+        dataSource.close();
     }
 }
