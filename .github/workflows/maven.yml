@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # WICHTIG: Erlaubt das Erstellen von Releases
+      contents: write # Required to create and update releases
 
     steps:
     - uses: actions/checkout@v4
@@ -26,17 +26,24 @@ jobs:
 
     - name: Prepare JAR for Release
       run: |
-        # Findet die richtige JAR
+        # Search for the VelocityCore JAR, excluding shaded/sources/javadoc
         JAR_PATH=$(find target/ -name "VelocityCore-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
-        # Kopiert sie mit einem festen Namen für das Release
+        
+        if [ -z "$JAR_PATH" ]; then
+          echo "Error: VelocityCore JAR not found!"
+          exit 1
+        fi
+        
+        echo "Found JAR: $JAR_PATH"
+        # Copy to a clean filename for the release asset
         cp "$JAR_PATH" ./velocitycore-latest.jar
 
-    - name: Create Release
+    - name: Update GitHub Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: latest
-        name: "Latest Build"
-        body: "Automatic build from ${{ github.event.head_commit.timestamp }}"
+        name: "VelocityCore Latest Build"
+        body: "Automated VelocityCore build from commit ${{ github.sha }} \nCompiled on: ${{ github.event.head_commit.timestamp }}"
         draft: false
         prerelease: false
         files: velocitycore-latest.jar
