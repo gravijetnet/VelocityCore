@@ -1,4 +1,4 @@
-name: Build and Release VelocityCore
+name: Build and Permanent Release VelocityCore
 
 on:
   push:
@@ -9,10 +9,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to create and update releases
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Set up JDK 21
       uses: actions/setup-java@v4
@@ -24,28 +26,33 @@ jobs:
     - name: Build with Maven
       run: mvn -B package --file pom.xml
 
-    - name: Prepare JAR for Release
+    - name: Prepare JAR
       run: |
-        # Search for the VelocityCore JAR, excluding shaded/sources/javadoc
         JAR_PATH=$(find target/ -name "VelocityCore-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
-        
-        if [ -z "$JAR_PATH" ]; then
-          echo "Error: VelocityCore JAR not found!"
-          exit 1
-        fi
-        
-        echo "Found JAR: $JAR_PATH"
-        # Copy to a clean filename for the release asset
-        cp "$JAR_PATH" ./velocitycore-latest.jar
+        if [ -z "$JAR_PATH" ]; then echo "JAR not found"; exit 1; fi
+        cp "$JAR_PATH" ./velocitycore-build-${{ github.run_number }}.jar
 
-    - name: Update GitHub Release
+    # Step 1: Create a UNIQUE release for this specific build
+    # This will NOT overwrite previous releases.
+    - name: Create Unique Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: build-${{ github.run_number }}
+        name: "VelocityCore Build #${{ github.run_number }}"
+        body: "Permanent archive of Build #${{ github.run_number }} \nCommit: ${{ github.sha }}"
+        files: velocitycore-build-${{ github.run_number *.jar
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Step 2: Update the "latest" release with the same file
+    # This WILL overwrite the 'latest' tag so people always have one stable link.
+    - name: Update Latest Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: latest
         name: "VelocityCore Latest Build"
-        body: "Automated VelocityCore build from commit ${{ github.sha }} \nCompiled on: ${{ github.event.head_commit.timestamp }}"
-        draft: false
-        prerelease: false
-        files: velocitycore-latest.jar
+        body: "This is the most recent successful build (#${{ github.run_number }})."
+        make_latest: true
+        files: velocitycore-build-${{ github.run_number }}.jar
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
