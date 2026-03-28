@@ -12,7 +12,8 @@ jobs:
       contents: write
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout Source
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
@@ -36,21 +37,23 @@ jobs:
           exit 1; 
         fi
         
-        # Create a unique filename for this build
+        # Create a unique filename for the permanent archive
         cp "$JAR_PATH" ./velocitycore-build-${{ github.run_number }}.jar
+        # Create a static filename for the 'latest' link
+        cp "$JAR_PATH" ./velocitycore-latest.jar
 
-    # Step 1: Create a UNIQUE release for this build number
-    - name: Create Unique Release
+    # Step 1: Create a PERMANENT release for this specific build
+    - name: Create Archive Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: build-${{ github.run_number }}
         name: "VelocityCore Build #${{ github.run_number }}"
-        body: "Permanent archive of VelocityCore Build #${{ github.run_number }} \nCommit: ${{ github.sha }}"
+        body: "Permanent archive of Build #${{ github.run_number }}"
         files: velocitycore-build-${{ github.run_number }}.jar
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # Step 2: Update the "latest" release
+    # Step 2: Update the LATEST release (Overwrites the file so it stays clean)
     - name: Update Latest Release
       uses: softprops/action-gh-release@v2
       with:
@@ -58,6 +61,6 @@ jobs:
         name: "VelocityCore Latest Build"
         body: "This is the most recent successful build (#${{ github.run_number }})."
         make_latest: true
-        files: velocitycore-build-${{ github.run_number }}.jar
+        files: velocitycore-latest.jar
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
