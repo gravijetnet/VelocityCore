@@ -5,8 +5,10 @@ import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
+import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
+import net.gravijet.velocity.core.logger.PlayerLogger;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
@@ -41,6 +43,7 @@ public class Core {
     private JoinMeManager joinMeManager;
     private PlayerDataDAO playerDataDAO;
     private SupportPlugin supportPlugin;
+    private PlayerLogger playerLogger;
 
     @Inject
     public Core(ProxyServer proxy, Logger logger, @DataDirectory Path dataDirectory) {
@@ -69,6 +72,8 @@ public class Core {
             cmd.register(cmd.metaBuilder("joinmecolor").aliases("jmc").build(), new JoinMeColorCommand(joinMeManager, coreConfig));
             cmd.register(cmd.metaBuilder("find").build(), new FindCommand(proxy, playerDataDAO, coreConfig));
 
+            this.playerLogger = new PlayerLogger(dataDirectory);
+
             // Initialize support subsystem
             this.supportPlugin = new SupportPlugin(proxy, logger, dataDirectory, this);
             supportPlugin.onProxyInit();
@@ -88,23 +93,42 @@ public class Core {
     @Subscribe
     public void onPostLogin(PostLoginEvent event) {
         Player player = event.getPlayer();
-
-       
         if (supportPlugin != null) supportPlugin.handlePlayerJoin(player);
     }
 
     @Subscribe
+    public void onServerConnected(ServerConnectedEvent event) {
+        Player player = event.getPlayer();
+        String ip = player.getRemoteAddress().getAddress().getHostAddress();
+        String toServer = event.getServer().getServerInfo().getName();
+
+        if (event.getPreviousServer().isPresent()) {
+            String fromServer = event.getPreviousServer().get().getServerInfo().getName();
+            playerLogger.logSwitch(player.getUsername(), ip, fromServer, toServer);
+        } else {
+            playerLogger.logJoin(player.getUsername(), ip, toServer);
+        }
+    }
+
+    @Subscribe
     public void onDisconnect(DisconnectEvent event) {
-        playerDataDAO.getPlayerData(event.getPlayer().getUniqueId()).thenAccept(data -> {
+        Player player = event.getPlayer();
+
+        playerDataDAO.getPlayerData(player.getUniqueId()).thenAccept(data -> {
             if (data != null) {
                 data.setLastOnline(System.currentTimeMillis());
-                event.getPlayer().getCurrentServer().ifPresent(server -> data.setLastServer(server.getServerInfo().getName()));
+                player.getCurrentServer().ifPresent(server -> data.setLastServer(server.getServerInfo().getName()));
                 playerDataDAO.savePlayerData(data);
             }
         });
 
+        String ip = player.getRemoteAddress().getAddress().getHostAddress();
+        String lastServer = player.getCurrentServer()
+                .map(s -> s.getServerInfo().getName())
+                .orElse("unknown");
+        playerLogger.logLeave(player.getUsername(), ip, lastServer);
 
-        if (supportPlugin != null) supportPlugin.handlePlayerLeave(event.getPlayer());
+        if (supportPlugin != null) supportPlugin.handlePlayerLeave(player);
     }
 
     public void shutdown() {
