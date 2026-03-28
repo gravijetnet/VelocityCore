@@ -108,8 +108,8 @@ public class CoreConfig {
         public String adminAmountClamped  = "&7Note: amount clamped to maximum.";
 
         // ── Ping ──────────────────────────────────────────────────────────────
-        public String pingSelf    = "&8\u00bb &cPing&8: {color}{ping}ms";
-        public String pingOther   = "&8\u00bb &cPing &8- &f{player}&8: {color}{ping}ms";
+        public String pingSelf    = "&8\u00bb &7Ping&8: {color}{ping}ms";
+        public String pingOther   = "&8\u00bb &7Ping &8- &f{player}&8: {color}{ping}ms";
         public String pingConsole = "&cConsole must specify a player.";
 
         // ── Find ──────────────────────────────────────────────────────────────
