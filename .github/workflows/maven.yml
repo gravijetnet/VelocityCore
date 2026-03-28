@@ -32,12 +32,19 @@ jobs:
 
     - name: Move JAR to root and Commit
       run: |
-        # Sucht die Lobby-JAR und benennt sie um
-        mv target/VelocityCore-!(*shaded*).jar ./velocitycore-latest.jar || mv target/VelocityCore-[0-9]*.jar ./velocitycore-latest.jar
+        # Sucht die richtige VelocityCore JAR (ohne shaded/sources/javadoc)
+        JAR_PATH=$(find target/ -name "VelocityCore-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
+        
+        if [ -z "$JAR_PATH" ]; then
+          echo "Fehler: Keine VelocityCore JAR gefunden!"
+          exit 1
+        fi
+        
+        mv "$JAR_PATH" ./velocitycore-latest.jar
         
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         
         git add -f velocitycore-latest.jar
-        git commit -m "Update Velocity JAR" || echo "No changes to commit"
+        git commit -m "Update VelocityCore JAR [skip ci]" || echo "No changes to commit"
         git push
