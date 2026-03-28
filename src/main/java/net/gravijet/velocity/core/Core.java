@@ -89,7 +89,7 @@ public class Core {
     public void onPostLogin(PostLoginEvent event) {
         Player player = event.getPlayer();
 
-        // Support: log connection & notify support manager
+       
         if (supportPlugin != null) supportPlugin.handlePlayerJoin(player);
     }
 
