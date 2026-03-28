@@ -133,6 +133,7 @@ public class Core {
 
     public void shutdown() {
         proxy.shutdown();
+        System.out.println("Shutting down...");
     }
 
     public static Core getInstance() {
