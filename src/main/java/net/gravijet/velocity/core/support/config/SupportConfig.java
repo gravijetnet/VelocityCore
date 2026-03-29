@@ -61,14 +61,14 @@ public class SupportConfig {
         public List<String> mainCommandMessage = Arrays.asList(
                 "&c&lGraviJet &7» &f&lSupport &8- &7Usage",
                 "&4● &c/support <language> &7» &fOpen a request in your prefered language. (DE/EN)",
-                "&4● &c/support chat <message> &7» &fSend a message in your session.",
+                "&4● &c/support chat <message> &7» &fSend a message in your session. &8(&c/spc&8)",
                 "&4● &c/support rate <1-5> &7» &fRate your support session."
                 );
 
         public List<String> staffHelpMessage = Arrays.asList(
                 "&c&lGraviJet &7» &f&lSupport &8- &7Usage",
                 "&4● &c/support claim <player> [--force] &7» &fClaim a support request.",
-                "&4● &c/support chat <message> &7» &fSend a message in the session.",
+                "&4● &c/support chat <message> &7» &fSend a message in the session. &8(&c/spc&8)",
                 "&4● &c/support close &7» &fClose the current session.",
                 "&4● &c/support show <player> &7» &fView session details.",
                 "&4● &c/support transfer <staff> &7» &fTransfer the session.",

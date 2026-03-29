@@ -2,6 +2,7 @@ package net.gravijet.velocity.core.support;
 
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.Core;
+import net.gravijet.velocity.core.support.command.SupportChatCommand;
 import net.gravijet.velocity.core.support.command.SupportCommand;
 import net.gravijet.velocity.core.support.config.SupportConfig;
 import net.gravijet.velocity.core.support.discord.DiscordBot;
@@ -35,8 +36,12 @@ public class SupportPlugin {
             manager    = new SupportManager(this, config);
             discordBot = new DiscordBot(this, config, manager);
 
-            var meta = server.getCommandManager().metaBuilder("support").aliases("help").build();
-            server.getCommandManager().register(meta, new SupportCommand(this));
+            var supportMeta = server.getCommandManager().metaBuilder("support").aliases("help").build();
+            server.getCommandManager().register(supportMeta, new SupportCommand(this));
+
+            var spcMeta = server.getCommandManager().metaBuilder("spc").build();
+            server.getCommandManager().register(spcMeta, new SupportChatCommand(this));
+
             discordBot.start();
 
             logger.info("Support Plugin enabled.");
