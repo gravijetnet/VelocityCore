@@ -29,39 +29,36 @@ jobs:
 
     - name: Prepare JAR
       run: |
-        # Find the VelocityCore JAR, excluding shaded/sources/javadoc
         JAR_PATH=$(find target/ -name "VelocityCore-*.jar" ! -name "*shaded*" ! -name "*-sources.jar" ! -name "*-javadoc.jar" | head -n 1)
-        
-        if [ -z "$JAR_PATH" ]; then 
-          echo "Error: VelocityCore JAR not found"; 
-          exit 1; 
-        fi
-        
-        # Create a unique filename for the archive
+        if [ -z "$JAR_PATH" ]; then exit 1; fi
         cp "$JAR_PATH" ./velocitycore-build-${{ github.run_number }}.jar
-        # Create a static filename for the latest release
         cp "$JAR_PATH" ./velocitycore-latest.jar
 
-    # Step 1: Permanent Archive (Unique Build Tag)
     - name: Create Archive Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: build-${{ github.run_number }}
         name: "VelocityCore Build #${{ github.run_number }}"
-        body: "Permanent archive of Build #${{ github.run_number }}. Includes source at this state."
+        body: "Archive of Build #${{ github.run_number }}"
         files: velocitycore-build-${{ github.run_number }}.jar
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # Step 2: Update Latest Release (Syncs JAR and Source Code)
+    - name: Delete Old Latest Tag
+      run: |
+        git tag -d latest || true
+        git push origin :refs/tags/latest || true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Update Latest Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: latest
         name: "VelocityCore Latest Build"
-        body: "This release always contains the NEWEST JAR and the NEWEST Source Code from the main branch."
-        # This moves the 'latest' tag to the current commit
-        make_latest: true
+        body: "This release contains the latest executable and source code from the main branch."
         files: velocitycore-latest.jar
+        prerelease: false
+        make_latest: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
