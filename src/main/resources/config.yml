@@ -1,0 +1,12 @@
+# Advertising Configuration
+advertising:
+  enabled: true
+  interval_minutes: 5 # How often messages are sent in minutes
+  messages:
+    - "&c&lGraviJet &7» &fVisit our website: &example.invalid"
+    - "&c&lGraviJet &7» &fJoin our Discord: &9discord.gg/gravijet"
+    - "&c&lGraviJet &7» &fSupport us by voting for the server!"
+
+# Plugin Reload Command
+reload_message: "&aVelocityCore has been reloaded!"
+no_permission_message: "&cYou do not have permission to use this command."

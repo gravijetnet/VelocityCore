@@ -3,7 +3,7 @@ package net.gravijet.velocity.core.commands;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
-import net.gravijet.velocity.core.config.CoreConfig;
+import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.managers.JoinMeManager;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
@@ -14,9 +14,9 @@ public class JoinMeColorCommand implements SimpleCommand {
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
 
     private final JoinMeManager joinMeManager;
-    private final CoreConfig config;
+    private final ConfigManager config;
 
-    public JoinMeColorCommand(JoinMeManager joinMeManager, CoreConfig config) {
+    public JoinMeColorCommand(JoinMeManager joinMeManager, ConfigManager config) {
         this.joinMeManager = joinMeManager;
         this.config = config;
     }
@@ -25,13 +25,13 @@ public class JoinMeColorCommand implements SimpleCommand {
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
         if (!(source instanceof Player player)) {
-            source.sendMessage(LEGACY.deserialize(config.get().playersOnly));
+            source.sendMessage(LEGACY.deserialize(config.getString("messages.players_only", "&cThis command can only be used by players.")));
             return;
         }
 
         String[] args = invocation.arguments();
         if (args.length == 0) {
-            player.sendMessage(LEGACY.deserialize(config.get().joinMeColorUsage));
+            player.sendMessage(LEGACY.deserialize(config.getString("messages.joinme.color.usage", "&cUsage: /joinmecolor <color|reset>")));
             return;
         }
 
@@ -39,7 +39,7 @@ public class JoinMeColorCommand implements SimpleCommand {
 
         if (raw.equalsIgnoreCase("reset")) {
             joinMeManager.setPlayerColor(player.getUniqueId(), null);
-            player.sendMessage(LEGACY.deserialize(config.get().joinMeColorReset));
+            player.sendMessage(LEGACY.deserialize(config.getString("messages.joinme.color.reset", "&aYour JoinMe color has been reset.")));
             return;
         }
 
@@ -51,7 +51,7 @@ public class JoinMeColorCommand implements SimpleCommand {
         if (visible.isEmpty()) visible = "[preview]";
 
         String preview = sectionSeq + visible;
-        player.sendMessage(LEGACY.deserialize(config.get().joinMeColorSet.replace("{preview}", preview)));
+        player.sendMessage(LEGACY.deserialize(config.getString("messages.joinme.color.set", "&aYour JoinMe color has been set to: {preview}").replace("{preview}", preview)));
     }
 
     private String stripFormatting(String input) {

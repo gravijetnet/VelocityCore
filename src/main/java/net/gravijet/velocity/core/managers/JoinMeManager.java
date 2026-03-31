@@ -4,8 +4,8 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
-import net.gravijet.velocity.core.Core;
-import net.gravijet.velocity.core.config.CoreConfig;
+import net.gravijet.velocity.core.Main;
+import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.database.models.PlayerData;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.sound.Sound;
@@ -14,6 +14,7 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -25,14 +26,14 @@ public class JoinMeManager {
     private static final long COOLDOWN_MS = 5 * 60 * 1000L;
     private static final Sound PING_SOUND = Sound.sound(Key.key("entity.experience_orb.pickup"), Sound.Source.PLAYER, 1.0f, 1.2f);
 
-    private final Core plugin;
+    private final Main plugin;
     private final ProxyServer proxy;
     private final TokenManager tokenManager;
-    private final CoreConfig config;
+    private final ConfigManager config;
     private final Map<UUID, Long> cooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, String> colorPreferences = new ConcurrentHashMap<>();
 
-    public JoinMeManager(Core plugin, ProxyServer proxy, TokenManager tokenManager, CoreConfig config) {
+    public JoinMeManager(Main plugin, ProxyServer proxy, TokenManager tokenManager, ConfigManager config) {
         this.plugin = plugin;
         this.proxy = proxy;
         this.tokenManager = tokenManager;
@@ -46,7 +47,7 @@ public class JoinMeManager {
                 long timeLeft = (lastUsed + COOLDOWN_MS) - System.currentTimeMillis();
                 if (timeLeft > 0) {
                     int seconds = (int) (timeLeft / 1000);
-                    player.sendMessage(LEGACY.deserialize(config.get().joinMeCooldown.replace("{seconds}", String.valueOf(seconds))));
+                    player.sendMessage(LEGACY.deserialize(config.getString("messages.joinme.cooldown", "&cYou are on cooldown for {seconds} seconds.").replace("{seconds}", String.valueOf(seconds))));
                     return CompletableFuture.completedFuture(false);
                 }
             }
@@ -63,7 +64,7 @@ public class JoinMeManager {
                 return CompletableFuture.completedFuture(true);
             }
             if (data == null || data.getTotalTokens() <= 0) {
-                player.sendMessage(LEGACY.deserialize(config.get().joinMeNoTokens));
+                player.sendMessage(LEGACY.deserialize(config.getString("messages.joinme.no_tokens", "&cYou do not have any JoinMe tokens.")));
                 return CompletableFuture.completedFuture(false);
             }
             return tokenManager.useToken(player.getUniqueId()).thenApply(success -> {
@@ -74,7 +75,7 @@ public class JoinMeManager {
                     broadcastJoinMe(player, false);
                     return true;
                 }
-                player.sendMessage(LEGACY.deserialize(config.get().joinMeTokenError));
+                player.sendMessage(LEGACY.deserialize(config.getString("messages.joinme.token_error", "&cCould not use your token. Please try again.")));
                 return false;
             });
         });
@@ -96,10 +97,10 @@ public class JoinMeManager {
         String accent = isAdmin ? "&a" : getPlayerColorPreference(player.getUniqueId());
         if (accent == null) accent = "&c";
 
-        String text = config.get().joinMeBroadcast
+        String text = config.getString("messages.joinme.broadcast", "{player} is on {server}! Click to join them!")
                 .replace("{player}", accent + player.getUsername() + "&7")
                 .replace("{server}", serverName);
-        String hover = config.get().joinMeHover.replace("{server}", serverName);
+        String hover = config.getString("messages.joinme.hover", "&aClick to join {server}").replace("{server}", serverName);
 
         return LEGACY.deserialize(text)
                 .hoverEvent(HoverEvent.showText(LEGACY.deserialize(hover)))

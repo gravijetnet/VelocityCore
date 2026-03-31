@@ -4,7 +4,7 @@ import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import net.gravijet.velocity.core.config.CoreConfig;
+import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.managers.JoinMeManager;
 import net.gravijet.velocity.core.managers.TokenManager;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -20,9 +20,9 @@ public class AdminJoinMeCommand implements SimpleCommand {
     private final ProxyServer proxy;
     private final TokenManager tokenManager;
     private final JoinMeManager joinMeManager;
-    private final CoreConfig config;
+    private final ConfigManager config;
 
-    public AdminJoinMeCommand(ProxyServer proxy, TokenManager tokenManager, JoinMeManager joinMeManager, CoreConfig config) {
+    public AdminJoinMeCommand(ProxyServer proxy, TokenManager tokenManager, JoinMeManager joinMeManager, ConfigManager config) {
         this.proxy = proxy;
         this.tokenManager = tokenManager;
         this.joinMeManager = joinMeManager;
@@ -46,7 +46,7 @@ public class AdminJoinMeCommand implements SimpleCommand {
             }
             case "forcejoinme" -> {
                 if (args.length >= 2) {
-                    if (!source.hasPermission("core.joinme.admin.force")) { send(source, config.get().noPermission); return; }
+                    if (!source.hasPermission("core.joinme.admin.force")) { send(source, config.getString("messages.no_permission", "&cYou do not have permission.")); return; }
                     handleForceJoinMe(source, args[1]);
                 } else {
                     send(source, "&cUsage: /adminjoinme forcejoinme <player>");
@@ -54,7 +54,7 @@ public class AdminJoinMeCommand implements SimpleCommand {
             }
             case "addtokens" -> {
                 if (args.length >= 3) {
-                    if (!source.hasPermission("core.joinme.admin.tokens.manage")) { send(source, config.get().noPermission); return; }
+                    if (!source.hasPermission("core.joinme.admin.tokens.manage")) { send(source, config.getString("messages.no_permission", "&cYou do not have permission.")); return; }
                     handleAddTokens(source, args[1], args[2]);
                 } else {
                     send(source, "&cUsage: /adminjoinme addtokens <player> <amount>");
@@ -62,7 +62,7 @@ public class AdminJoinMeCommand implements SimpleCommand {
             }
             case "removetokens" -> {
                 if (args.length >= 3) {
-                    if (!source.hasPermission("core.joinme.admin.tokens.manage")) { send(source, config.get().noPermission); return; }
+                    if (!source.hasPermission("core.joinme.admin.tokens.manage")) { send(source, config.getString("messages.no_permission", "&cYou do not have permission.")); return; }
                     handleRemoveTokens(source, args[1], args[2]);
                 } else {
                     send(source, "&cUsage: /adminjoinme removetokens <player> <amount>");
@@ -74,18 +74,18 @@ public class AdminJoinMeCommand implements SimpleCommand {
 
     private void handleTokens(CommandSource source, String playerName) {
         if (!source.hasPermission("core.joinme.admin.tokens.view")) {
-            send(source, config.get().noPermission);
+            send(source, config.getString("messages.no_permission", "&cYou do not have permission."));
             return;
         }
         Optional<Player> opt = proxy.getPlayer(playerName);
         if (opt.isEmpty()) {
-            send(source, config.get().playerNotFound.replace("{player}", playerName));
+            send(source, config.getString("messages.player_not_found", "&cPlayer {player} not found.").replace("{player}", playerName));
             return;
         }
         tokenManager.getPlayerData(opt.get().getUniqueId()).thenAccept(data -> {
-            if (data == null) { send(source, config.get().tokensError); return; }
+            if (data == null) { send(source, config.getString("messages.tokens.error", "&cCould not retrieve token data.")); return; }
             boolean unlimited = tokenManager.hasUnlimitedTokens(opt.get().getUniqueId());
-            String header = config.get().adminTokensHeader.replace("{player}", playerName);
+            String header = config.getString("messages.tokens.admin_header", "&c&l{player}'s Tokens").replace("{player}", playerName);
             String info = "&7Monthly&8:    &f" + data.getMonthlyTokens() + "\n" +
                           "&7Permanent&8:  &f" + data.getPermanentTokens() + "\n" +
                           "&7Total&8:      &f" + data.getTotalTokens() + "\n" +
@@ -96,23 +96,23 @@ public class AdminJoinMeCommand implements SimpleCommand {
 
     private void handleForceJoinMe(CommandSource source, String playerName) {
         Optional<Player> opt = proxy.getPlayer(playerName);
-        if (opt.isEmpty()) { send(source, config.get().playerNotFound.replace("{player}", playerName)); return; }
+        if (opt.isEmpty()) { send(source, config.getString("messages.player_not_found", "&cPlayer {player} not found.").replace("{player}", playerName)); return; }
         joinMeManager.forceJoinMe(opt.get());
-        send(source, config.get().adminForceSuccess.replace("{player}", playerName));
-        send(opt.get(), config.get().adminForceReceived);
+        send(source, config.getString("messages.joinme.admin.force_success", "&aForced a JoinMe for {player}.").replace("{player}", playerName));
+        send(opt.get(), config.getString("messages.joinme.admin.force_received", "&aAn admin has created a JoinMe for you."));
     }
 
     private void handleAddTokens(CommandSource source, String playerName, String amountStr) {
         int amount = parseAmount(source, amountStr);
         if (amount < 0) return;
         Optional<Player> opt = proxy.getPlayer(playerName);
-        if (opt.isEmpty()) { send(source, config.get().playerNotFound.replace("{player}", playerName)); return; }
+        if (opt.isEmpty()) { send(source, config.getString("messages.player_not_found", "&cPlayer {player} not found.").replace("{player}", playerName)); return; }
         tokenManager.addPermanentTokens(opt.get().getUniqueId(), amount).thenAccept(success -> {
             if (success) {
-                send(source, config.get().adminAddSuccess.replace("{amount}", String.valueOf(amount)).replace("{player}", playerName));
-                send(opt.get(), config.get().adminAddReceived.replace("{amount}", String.valueOf(amount)));
+                send(source, config.getString("messages.tokens.admin.add_success", "&aAdded {amount} tokens to {player}.").replace("{amount}", String.valueOf(amount)).replace("{player}", playerName));
+                send(opt.get(), config.getString("messages.tokens.admin.add_received", "&aYou received {amount} tokens.").replace("{amount}", String.valueOf(amount)));
             } else {
-                send(source, config.get().adminAddFailed);
+                send(source, config.getString("messages.tokens.admin.add_failed", "&cFailed to add tokens."));
             }
         });
     }
@@ -121,13 +121,13 @@ public class AdminJoinMeCommand implements SimpleCommand {
         int amount = parseAmount(source, amountStr);
         if (amount < 0) return;
         Optional<Player> opt = proxy.getPlayer(playerName);
-        if (opt.isEmpty()) { send(source, config.get().playerNotFound.replace("{player}", playerName)); return; }
+        if (opt.isEmpty()) { send(source, config.getString("messages.player_not_found", "&cPlayer {player} not found.").replace("{player}", playerName)); return; }
         tokenManager.removePermanentTokens(opt.get().getUniqueId(), amount).thenAccept(success -> {
             if (success) {
-                send(source, config.get().adminRemoveSuccess.replace("{amount}", String.valueOf(amount)).replace("{player}", playerName));
-                send(opt.get(), config.get().adminRemoveReceived.replace("{amount}", String.valueOf(amount)));
+                send(source, config.getString("messages.tokens.admin.remove_success", "&aRemoved {amount} tokens from {player}.").replace("{amount}", String.valueOf(amount)).replace("{player}", playerName));
+                send(opt.get(), config.getString("messages.tokens.admin.remove_received", "&a{amount} tokens were removed from your account.").replace("{amount}", String.valueOf(amount)));
             } else {
-                send(source, config.get().adminRemoveFailed);
+                send(source, config.getString("messages.tokens.admin.remove_failed", "&cFailed to remove tokens."));
             }
         });
     }
@@ -136,25 +136,23 @@ public class AdminJoinMeCommand implements SimpleCommand {
     private int parseAmount(CommandSource source, String raw) {
         try {
             long val = Long.parseLong(raw);
-            if (val <= 0) { send(source, config.get().invalidAmount); return -1; }
+            if (val <= 0) { send(source, config.getString("messages.tokens.invalid_amount", "&cInvalid amount.")); return -1; }
             if (val > Integer.MAX_VALUE) {
-                send(source, config.get().adminAmountClamped);
+                send(source, config.getString("messages.tokens.amount_clamped", "&cAmount too large, setting to max."));
                 return Integer.MAX_VALUE;
             }
             return (int) val;
         } catch (NumberFormatException e) {
-            send(source, config.get().invalidAmount);
+            send(source, config.getString("messages.tokens.invalid_amount", "&cInvalid amount."));
             return -1;
         }
     }
 
     private void sendHelp(CommandSource source) {
-        StringBuilder sb = new StringBuilder();
-        for (String line : config.get().adminJoinMeHelp) {
-            if (!sb.isEmpty()) sb.append('\n');
-            sb.append(line);
+        List<String> helpLines = config.getStringList("messages.joinme.admin.help", List.of("&cAdminJoinMe Help:", "/ajm tokens <player>", "/ajm forcejoinme <player>", "/ajm addtokens <player> <amount>", "/ajm removetokens <player> <amount>"));
+        for (String line : helpLines) {
+            source.sendMessage(LEGACY.deserialize(line));
         }
-        source.sendMessage(LEGACY.deserialize(sb.toString()));
     }
 
     private void send(CommandSource source, String message) {

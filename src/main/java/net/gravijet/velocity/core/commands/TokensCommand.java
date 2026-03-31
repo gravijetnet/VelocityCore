@@ -4,20 +4,22 @@ import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import net.gravijet.velocity.core.config.CoreConfig;
+import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.managers.TokenManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+
+import java.util.List;
 
 public class TokensCommand implements SimpleCommand {
 
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
 
     private final TokenManager tokenManager;
-    private final CoreConfig config;
+    private final ConfigManager config;
 
-    public TokensCommand(ProxyServer proxy, TokenManager tokenManager, CoreConfig config) {
+    public TokensCommand(ProxyServer proxy, TokenManager tokenManager, ConfigManager config) {
         this.tokenManager = tokenManager;
         this.config = config;
     }
@@ -26,35 +28,42 @@ public class TokensCommand implements SimpleCommand {
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
         if (!(source instanceof Player player)) {
-            source.sendMessage(LEGACY.deserialize(config.get().playersOnly));
+            source.sendMessage(LEGACY.deserialize(config.getString("messages.players_only", "&cThis command can only be used by players.")));
             return;
         }
         if (!player.hasPermission("core.joinme.tokens.view")) {
-            player.sendMessage(LEGACY.deserialize(config.get().noPermission));
+            player.sendMessage(LEGACY.deserialize(config.getString("messages.no_permission", "&cYou do not have permission to use this command.")));
             return;
         }
 
         tokenManager.getPlayerData(player.getUniqueId()).thenAccept(data -> {
             if (data == null) {
-                player.sendMessage(LEGACY.deserialize(config.get().tokensError));
+                player.sendMessage(LEGACY.deserialize(config.getString("messages.tokens.error", "&cCould not retrieve token data.")));
                 return;
             }
 
-            CoreConfig.Messages msg = config.get();
             boolean unlimited = tokenManager.hasUnlimitedTokens(player.getUniqueId());
 
-            String status    = unlimited ? msg.tokensStatusUnlimited
-                             : data.getTotalTokens() > 0 ? msg.tokensStatusAvailable
-                             : msg.tokensStatusEmpty;
-            String monthly   = unlimited ? msg.tokensStatusUnlimited : String.valueOf(data.getMonthlyTokens());
-            String total     = unlimited ? msg.tokensStatusUnlimited : String.valueOf(data.getTotalTokens());
-            String permanent = unlimited ? msg.tokensStatusUnlimited : String.valueOf(data.getPermanentTokens());
+            String status    = unlimited ? config.getString("messages.tokens.status_unlimited", "&aUnlimited")
+                             : data.getTotalTokens() > 0 ? config.getString("messages.tokens.status_available", "&aAvailable")
+                             : config.getString("messages.tokens.status_empty", "&cEmpty");
+            String monthly   = unlimited ? config.getString("messages.tokens.unlimited_symbol", "∞") : String.valueOf(data.getMonthlyTokens());
+            String total     = unlimited ? config.getString("messages.tokens.unlimited_symbol", "∞") : String.valueOf(data.getTotalTokens());
+            String permanent = unlimited ? config.getString("messages.tokens.unlimited_symbol", "∞") : String.valueOf(data.getPermanentTokens());
             String cooldown  = player.hasPermission("core.joinme.cooldown.bypass")
-                             ? msg.tokensCooldownBypassed : msg.tokensCooldownDefault;
+                             ? config.getString("messages.tokens.cooldown_bypassed", "&aBypassed") : config.getString("messages.tokens.cooldown_default", "5 minutes");
 
-            // Build message from config lines
+            List<String> lines = config.getStringList("messages.tokens.info", List.of(
+                "&c&lGraviJet &7» &f&lJoinMe Tokens",
+                "&cStatus&8:    &f{status}",
+                "&cTotal&8:     &f{total}",
+                "&cMonthly&8:   &f{monthly} &8(&7resets monthly&8)",
+                "&cPermanent&8: &f{permanent} &8(&7never expires&8)",
+                "&cCooldown&8:  &f{cooldown}"
+            ));
+
             Component built = Component.empty();
-            for (String line : msg.tokensInfo) {
+            for (String line : lines) {
                 String resolved = line
                         .replace("{status}",    status)
                         .replace("{total}",     total)
@@ -66,9 +75,10 @@ public class TokensCommand implements SimpleCommand {
             }
             player.sendMessage(built);
 
-            // Clickable store link
-            Component link = LEGACY.deserialize(msg.tokensStoreLink)
-                    .clickEvent(ClickEvent.openUrl("https://store.hexalon.net"));
+            String storeLinkMessage = config.getString("messages.tokens.store_link_text", "&a&l[STORE] &fClick here to get more tokens!");
+            String storeLinkUrl = config.getString("messages.tokens.store_link_url", "https://store.example.com");
+            Component link = LEGACY.deserialize(storeLinkMessage)
+                    .clickEvent(ClickEvent.openUrl(storeLinkUrl));
             player.sendMessage(link);
         });
     }

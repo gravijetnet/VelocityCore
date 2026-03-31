@@ -1,7 +1,7 @@
 package net.gravijet.velocity.core.support;
 
 import com.velocitypowered.api.proxy.ProxyServer;
-import net.gravijet.velocity.core.Core;
+import net.gravijet.velocity.core.Main;
 import net.gravijet.velocity.core.support.command.SupportChatCommand;
 import net.gravijet.velocity.core.support.command.SupportCommand;
 import net.gravijet.velocity.core.support.config.SupportConfig;
@@ -17,12 +17,12 @@ public class SupportPlugin {
     private final ProxyServer server;
     private final Logger logger;
     private final Path dataDirectory;
-    private final Core core;
+    private final Main core;
     private SupportConfig config;
     private SupportManager manager;
     private DiscordBot discordBot;
 
-    public SupportPlugin(ProxyServer server, Logger logger, Path dataDirectory, Core core) {
+    public SupportPlugin(ProxyServer server, Logger logger, Path dataDirectory, Main core) {
         this.server = server;
         this.logger = logger;
         this.dataDirectory = dataDirectory;
@@ -76,7 +76,7 @@ public class SupportPlugin {
     public ProxyServer getServer()      { return server; }
     public Logger getLogger()           { return logger; }
     public Path getDataDirectory()      { return dataDirectory; }
-    public Core getCorePlugin()         { return core; }
+    public Main getCorePlugin()         { return core; }
     public SupportConfig getConfig()    { return config; }
     public SupportManager getManager()  { return manager; }
     public DiscordBot getDiscordBot()   { return discordBot; }

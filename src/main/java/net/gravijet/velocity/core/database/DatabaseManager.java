@@ -2,7 +2,7 @@ package net.gravijet.velocity.core.database;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import net.gravijet.velocity.core.Core;
+import net.gravijet.velocity.core.Main;
 
 import java.sql.*;
 
@@ -43,7 +43,7 @@ public class DatabaseManager {
 
         } catch (SQLException e) {
             e.printStackTrace();
-            Core.getInstance().shutdown();
+            Main.getInstance().shutdown();
         }
     }
 
