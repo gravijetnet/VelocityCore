@@ -42,10 +42,15 @@ public class ConfigManager {
     private CommentedConfigurationNode loadYamlConfiguration(String fileName) {
         Path filePath = dataDirectory.resolve(fileName);
         if (Files.notExists(filePath)) {
-            try (InputStream in = Main.class.getClassLoader().getResourceAsStream(fileName)) {
-                Files.copy(Objects.requireNonNull(in), filePath);
+            // Use an absolute path to get the resource from the root of the JAR
+            try (InputStream in = Main.class.getResourceAsStream("/" + fileName)) {
+                if (in == null) {
+                    throw new IOException("Resource not found: " + fileName);
+                }
+                Files.createDirectories(filePath.getParent());
+                Files.copy(in, filePath);
             } catch (IOException e) {
-                server.getConsoleCommandSource().sendMessage(net.kyori.adventure.text.Component.text("Could not create " + fileName, net.kyori.adventure.text.format.NamedTextColor.RED));
+                server.getConsoleCommandSource().sendMessage(net.kyori.adventure.text.Component.text("Could not create " + fileName + ": " + e.getMessage(), net.kyori.adventure.text.format.NamedTextColor.RED));
             }
         }
 
@@ -55,7 +60,7 @@ public class ConfigManager {
         try {
             return loader.load();
         } catch (ConfigurateException e) {
-            server.getConsoleCommandSource().sendMessage(net.kyori.adventure.text.Component.text("Error loading " + fileName, net.kyori.adventure.text.format.NamedTextColor.RED));
+            server.getConsoleCommandSource().sendMessage(net.kyori.adventure.text.Component.text("Error loading " + fileName + ": " + e.getMessage(), net.kyori.adventure.text.format.NamedTextColor.RED));
             return null;
         }
     }
