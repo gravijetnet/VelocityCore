@@ -4,9 +4,9 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.Main;
 import net.gravijet.velocity.core.support.command.SupportChatCommand;
 import net.gravijet.velocity.core.support.command.SupportCommand;
-import net.gravijet.velocity.core.support.config.SupportConfig;
 import net.gravijet.velocity.core.support.discord.DiscordBot;
 import net.gravijet.velocity.core.support.manager.SupportManager;
+import net.gravijet.velocity.core.util.ConfigManager;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -18,7 +18,7 @@ public class SupportPlugin {
     private final Logger logger;
     private final Path dataDirectory;
     private final Main core;
-    private SupportConfig config;
+    private final ConfigManager configManager; // Use central ConfigManager
     private SupportManager manager;
     private DiscordBot discordBot;
 
@@ -27,14 +27,20 @@ public class SupportPlugin {
         this.logger = logger;
         this.dataDirectory = dataDirectory;
         this.core = core;
+        this.configManager = core.getConfigManager(); // Get ConfigManager from Main
         initDirectories();
     }
 
     public void onProxyInit() {
+        // Check if support system is enabled
+        if (!configManager.getConfig().node("support", "enabled").getBoolean(false)) {
+            logger.info("Support Plugin is disabled in config.yml.");
+            return;
+        }
+
         try {
-            config     = new SupportConfig(dataDirectory);
-            manager    = new SupportManager(this, config);
-            discordBot = new DiscordBot(this, config, manager);
+            manager    = new SupportManager(this, configManager); // Pass ConfigManager
+            discordBot = new DiscordBot(this, configManager, manager); // Pass ConfigManager
 
             var supportMeta = server.getCommandManager().metaBuilder("support").aliases("help").build();
             server.getCommandManager().register(supportMeta, new SupportCommand(this));
@@ -42,7 +48,10 @@ public class SupportPlugin {
             var spcMeta = server.getCommandManager().metaBuilder("spc").build();
             server.getCommandManager().register(spcMeta, new SupportChatCommand(this));
 
-            discordBot.start();
+            // Only start Discord bot if enabled in config
+            if (configManager.getConfig().node("support", "discord", "enabled").getBoolean(false)) {
+                discordBot.start();
+            }
 
             logger.info("Support Plugin enabled.");
         } catch (Exception e) {
@@ -77,7 +86,7 @@ public class SupportPlugin {
     public Logger getLogger()           { return logger; }
     public Path getDataDirectory()      { return dataDirectory; }
     public Main getCorePlugin()         { return core; }
-    public SupportConfig getConfig()    { return config; }
+    public ConfigManager getConfigManager() { return configManager; } // New getter for ConfigManager
     public SupportManager getManager()  { return manager; }
     public DiscordBot getDiscordBot()   { return discordBot; }
 }

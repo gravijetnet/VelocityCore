@@ -4,31 +4,43 @@ import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import net.gravijet.velocity.core.support.SupportPlugin;
 import net.gravijet.velocity.core.support.manager.SupportManager;
+import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 public class SupportChatCommand implements SimpleCommand {
 
     private final SupportManager manager;
-    private final LegacyComponentSerializer serial = LegacyComponentSerializer.legacyAmpersand();
+    private final ConfigManager configManager;
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public SupportChatCommand(SupportPlugin plugin) {
         this.manager = plugin.getManager();
+        this.configManager = plugin.getConfigManager();
     }
 
     @Override
     public void execute(Invocation inv) {
         if (!(inv.source() instanceof Player player)) {
-            inv.source().sendMessage(Component.text("This command can only be used by players."));
+            inv.source().sendMessage(getMessage("general.players-only"));
             return;
         }
 
         String[] args = inv.arguments();
         if (args.length == 0) {
-            player.sendMessage(serial.deserialize("&cUsage: /spc <message>"));
+            player.sendMessage(getMessage("support.chat-usage"));
             return;
         }
 
         manager.handleSupportChat(player, String.join(" ", args));
+    }
+
+    private Component getMessage(String path, TagResolver... resolvers) {
+        String template = configManager.getMessages().node(path.split("\\.")).getString("");
+        if (template == null || template.isEmpty()) {
+            return Component.text("Error: Message for " + path + " not found.").color(net.kyori.adventure.text.format.NamedTextColor.RED);
+        }
+        return miniMessage.deserialize(template, resolvers);
     }
 }

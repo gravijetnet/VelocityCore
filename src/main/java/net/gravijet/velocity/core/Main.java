@@ -58,12 +58,15 @@ public class Main {
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
         try {
+            // Force-load the shaded driver class
+            Class.forName("net.gravijet.velocity.core.libs.mysql.cj.jdbc.Driver");
+
             // Initialize Managers
             this.configManager = new ConfigManager(proxy, dataDirectory);
-            this.tokenManager = new TokenManager(new DatabaseManager(), proxy);
+            this.tokenManager = new TokenManager(new DatabaseManager(configManager), proxy);
             this.joinMeManager = new JoinMeManager(this, proxy, tokenManager, configManager);
             this.advertisingManager = new AdvertisingManager(this, proxy, configManager);
-            this.playerDataDAO = new PlayerDataDAO(new DatabaseManager());
+            this.playerDataDAO = new PlayerDataDAO(new DatabaseManager(configManager));
             this.playerLogger = new PlayerLogger(dataDirectory);
 
             // Start Services

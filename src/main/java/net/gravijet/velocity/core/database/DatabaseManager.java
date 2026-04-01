@@ -3,17 +3,31 @@ package net.gravijet.velocity.core.database;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import net.gravijet.velocity.core.Main;
+import net.gravijet.velocity.core.util.ConfigManager;
+import org.spongepowered.configurate.ConfigurationNode;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 public class DatabaseManager {
     private final HikariDataSource dataSource;
 
-    public DatabaseManager() {
+    public DatabaseManager(ConfigManager configManager) {
+        try {
+            // Explicitly load the driver class
+            Class.forName("com.mysql.cj.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("Failed to load MySQL JDBC driver", e);
+        }
+
+        ConfigurationNode dbNode = configManager.getConfig().node("database");
+
         HikariConfig cfg = new HikariConfig();
-        cfg.setJdbcUrl("jdbc:mysql://localhost:3306/velocity");
-        cfg.setUsername("velocity");
-        cfg.setPassword("velocity");
+        cfg.setJdbcUrl("jdbc:mysql://" + dbNode.node("host").getString("localhost") + ":" + dbNode.node("port").getInt(3306) + "/" + dbNode.node("database").getString("velocity"));
+        cfg.setUsername(dbNode.node("username").getString("user"));
+        cfg.setPassword(dbNode.node("password").getString("password"));
         cfg.setMaximumPoolSize(10);
         cfg.setMinimumIdle(2);
         cfg.setConnectionTimeout(30_000);

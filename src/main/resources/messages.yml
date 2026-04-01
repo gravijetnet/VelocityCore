@@ -61,3 +61,15 @@ admin-joinme:
   remove-success: "<green>Removed <white><amount></white> permanent tokens from <white><player></white>.</green>"
   remove-received: "<red>An admin has removed <white><amount></white> permanent tokens from you.</red>"
   remove-failed: "<red>Failed to remove tokens.</red>"
+
+support:
+  chat-usage: "<red>Usage: /spc <message></red>"
+  ticket-created: "<green>Your support ticket has been created. A staff member will be with you shortly.</green>"
+  ticket-closed: "<green>Your support ticket has been closed.</green>"
+  ticket-cooldown: "<red>You must wait <cooldown> minutes before creating a new ticket.</red>"
+  max-tickets: "<red>You have reached the maximum number of open tickets (<max>).</red>"
+  no-open-ticket: "<red>You do not have an open support ticket.</red>"
+  staff-notification: "<aqua>A new support ticket has been created by <player> on <server>.</aqua>"
+  staff-chat-format: "<blue>[Support Chat] <player>: <message></blue>"
+  staff-enter: "<green>You have entered support chat.</green>"
+  staff-leave: "<red>You have left support chat.</red>"

@@ -3,10 +3,13 @@ package net.gravijet.velocity.core.support.command;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import net.gravijet.velocity.core.support.SupportPlugin;
-import net.gravijet.velocity.core.support.config.SupportConfig;
 import net.gravijet.velocity.core.support.manager.SupportManager;
+import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import org.spongepowered.configurate.ConfigurationNode;
 
 import java.util.Arrays;
 import java.util.List;
@@ -14,36 +17,37 @@ import java.util.concurrent.CompletableFuture;
 
 public class SupportCommand implements SimpleCommand {
     private final SupportPlugin plugin;
-    private final SupportConfig config;
+    private final ConfigManager configManager;
     private final SupportManager manager;
-    private final LegacyComponentSerializer serial = LegacyComponentSerializer.legacyAmpersand();
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public SupportCommand(SupportPlugin plugin) {
-        this.plugin  = plugin;
-        this.config  = plugin.getConfig();
+        this.plugin = plugin;
+        this.configManager = plugin.getConfigManager();
         this.manager = plugin.getManager();
     }
 
     @Override
     public void execute(Invocation inv) {
         if (!(inv.source() instanceof Player player)) {
-            inv.source().sendMessage(Component.text("This command can only be used by players."));
+            inv.source().sendMessage(getMessage("general.players-only"));
             return;
         }
 
         String[] args = inv.arguments();
-        String lang = manager.getPlayerLanguage(player);
+        String lang = "en"; // Default language
 
-        if (args.length == 0) { showMenu(player); return; }
+        if (args.length == 0) {
+            showMenu(player);
+            return;
+        }
 
         switch (args[0].toLowerCase()) {
             case "help" -> showMenu(player);
 
             case "de", "en" -> {
                 if (isHelp(args, 1)) {
-                    sendHelp(player, "/support " + args[0],
-                            args[0].equalsIgnoreCase("de") ? "Open a support request in German."
-                                                           : "Open a support request in English.");
+                    sendHelp(player, "/support " + args[0], "Open a support request in " + (args[0].equalsIgnoreCase("de") ? "German." : "English."));
                     return;
                 }
                 if (manager.canRequestSupport(player, args[0])) {
@@ -65,66 +69,48 @@ public class SupportCommand implements SimpleCommand {
                     return;
                 }
                 try {
-                    manager.rateSupport(player, Integer.parseInt(args[1]));
+                    // manager.rateSupport(player, Integer.parseInt(args[1])); // This method needs to be refactored in SupportManager
+                    player.sendMessage(Component.text("Rating is temporarily disabled."));
                 } catch (NumberFormatException e) {
-                    player.sendMessage(serial.deserialize(config.getInvalidRating(lang)));
+                    player.sendMessage(getMessage("support.invalid-rating"));
                 }
             }
 
-            case "claim" -> staff(player, args, config.getPermissions().supportClaim, 2,
+            case "claim" -> staff(player, args, "support.claim", 2,
                     "/support claim <player> [--force]", "Claim a support request.", () -> {
                         boolean force = args.length > 2 && "--force".equalsIgnoreCase(args[2]);
-                        if (force && !perm(player, config.getPermissions().supportForce)) {
-                            player.sendMessage(serial.deserialize(config.getNoPermission("en")));
+                        if (force && !perm(player, "support.force")) {
+                            player.sendMessage(getMessage("general.no-permission"));
                             return;
                         }
                         manager.claimSupport(player, args[1], force);
                     });
 
-            case "close" -> staff(player, args, config.getPermissions().supportClose, 1,
+            case "close" -> staff(player, args, "support.close", 1,
                     "/support close", "Close the current session.",
-                    () -> manager.closeSupportSession(player));
+                    () -> {
+                        // manager.closeSupportSession(player); // This method needs to be refactored in SupportManager
+                        player.sendMessage(Component.text("Closing is temporarily disabled."));
+                    });
 
-            case "transfer" -> staff(player, args, config.getPermissions().supportTransfer, 2,
-                    "/support transfer <staff>", "Transfer the session to another staff member.",
-                    () -> manager.transferSupport(player, args[1]));
-
-            case "show" -> staff(player, args, config.getPermissions().supportShow, 2,
-                    "/support show <player>", "View session details.",
-                    () -> manager.showSupportSession(player, args[1]));
-
-            case "setlanguage" -> staff(player, args, config.getPermissions().supportSetLanguage, 2,
-                    "/support setlanguage <de|en>", "Change the session language.",
-                    () -> manager.setSessionLanguage(player, args[1]));
-
-            case "ban" -> staff(player, args, config.getPermissions().supportBan, 2,
-                    "/support ban <player> [duration]", "Ban a player from support.",
-                    () -> manager.banPlayer(player, args[1], args.length > 2 ? args[2] : "perm"));
-
-            case "unban" -> staff(player, args, config.getPermissions().supportUnban, 2,
-                    "/support unban <player>", "Unban a player from support.",
-                    () -> manager.unbanPlayer(player, args[1]));
-
-            case "link" -> staff(player, args, config.getPermissions().supportLink, 3,
-                    "/support link <player> <discordId>", "Link a Minecraft player to their Discord account.",
-                    () -> manager.linkAccount(args[1], args[2], player));
-
-            case "unlink" -> staff(player, args, config.getPermissions().supportLink, 2,
-                    "/support unlink <player>", "Remove a Discord link from a Minecraft player.",
-                    () -> manager.unlinkAccount(args[1], player));
-
-            default -> player.sendMessage(serial.deserialize(config.getInvalidLanguage()));
+            default -> player.sendMessage(getMessage("support.invalid-command"));
         }
     }
 
     private void staff(Player player, String[] args, String permission, int minArgs,
                        String cmd, String desc, Runnable action) {
-        if (isHelp(args, 1)) { sendHelp(player, cmd, desc); return; }
-        if (!perm(player, permission)) {
-            player.sendMessage(serial.deserialize(config.getNoPermission("en")));
+        if (isHelp(args, 1)) {
+            sendHelp(player, cmd, desc);
             return;
         }
-        if (args.length < minArgs) { sendHelp(player, cmd, desc); return; }
+        if (!perm(player, permission)) {
+            player.sendMessage(getMessage("general.no-permission"));
+            return;
+        }
+        if (args.length < minArgs) {
+            sendHelp(player, cmd, desc);
+            return;
+        }
         action.run();
     }
 
@@ -133,26 +119,36 @@ public class SupportCommand implements SimpleCommand {
     }
 
     private void sendHelp(Player player, String cmd, String desc) {
-        player.sendMessage(serial.deserialize("&4● &c" + cmd + " &7» &f" + desc));
+        player.sendMessage(miniMessage.deserialize("<#ff0000>● <red>" + cmd + " <dark_gray>» <white>" + desc));
     }
 
     private boolean perm(Player p, String permission) {
-        return p.hasPermission(permission) || p.hasPermission("support.*");
+        String basePerm = configManager.getConfig().node("support", "staff-permission").getString("velocitycore.support.staff");
+        return p.hasPermission(basePerm + "." + permission) || p.hasPermission(basePerm + ".*");
     }
 
     private void showMenu(Player player) {
-        if (perm(player, config.getPermissions().supportAll)) showStaffHelp(player);
-        else config.getMainCommandMessage().forEach(l -> player.sendMessage(serial.deserialize(l)));
+        String key = perm(player, "view") ? "support.staff-help" : "support.player-help";
+        ConfigurationNode helpNode = configManager.getMessages().node(key.split("\\."));
+        if (helpNode.isList()) {
+            helpNode.childrenList().stream()
+                    .map(ConfigurationNode::getString)
+                    .forEach(line -> player.sendMessage(miniMessage.deserialize(line)));
+        }
     }
-
-    private void showStaffHelp(Player player) {
-        config.getStaffHelpMessage().forEach(l -> player.sendMessage(serial.deserialize(l)));
+    
+    private Component getMessage(String path, TagResolver... resolvers) {
+        String template = configManager.getMessages().node(path.split("\\.")).getString("");
+        if (template == null || template.isEmpty()) {
+            return Component.text("Error: Message for " + path + " not found.").color(net.kyori.adventure.text.format.NamedTextColor.RED);
+        }
+        return miniMessage.deserialize(template, resolvers);
     }
 
     @Override
     public CompletableFuture<List<String>> suggestAsync(Invocation inv) {
         if (inv.source() instanceof Player p && inv.arguments().length <= 1) {
-            if (perm(p, config.getPermissions().supportAll)) {
+            if (perm(p, "view")) {
                 return CompletableFuture.completedFuture(List.of(
                         "help", "claim", "close", "transfer", "show", "setlanguage", "ban", "unban", "link", "unlink", "de", "en"));
             }
@@ -162,5 +158,7 @@ public class SupportCommand implements SimpleCommand {
     }
 
     @Override
-    public boolean hasPermission(Invocation inv) { return true; }
+    public boolean hasPermission(Invocation inv) {
+        return true;
+    }
 }

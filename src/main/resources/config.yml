@@ -24,3 +24,15 @@ advertising:
     - "<gold>Welcome to our server network!</gold>"
     - "<aqua>Check out our website: <click:open_url:'https://example.invalid'>example.invalid</click></aqua>"
     - "<yellow>Don't forget to vote for rewards!</yellow>"
+
+# Support system settings
+support:
+  enabled: true
+  discord:
+    enabled: true
+    bot-token: "YOUR_DISCORD_BOT_TOKEN_HERE"
+    channel-id: "YOUR_DISCORD_CHANNEL_ID_HERE" # Channel for support requests
+    log-channel-id: "YOUR_DISCORD_LOG_CHANNEL_ID_HERE" # Channel for logging support events
+  max-open-tickets: 3
+  ticket-cooldown-minutes: 10
+  staff-permission: "velocitycore.support.staff"
