@@ -4,87 +4,104 @@ import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import net.gravijet.velocity.core.managers.JoinMeManager;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.managers.TokenManager;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import org.spongepowered.configurate.ConfigurationNode;
 
-import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class TokensCommand implements SimpleCommand {
 
-    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
-
     private final TokenManager tokenManager;
-    private final ConfigManager config;
+    private final JoinMeManager joinMeManager;
+    private final ConfigManager configManager;
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public TokensCommand(ProxyServer proxy, TokenManager tokenManager, ConfigManager config) {
+    public TokensCommand(ProxyServer proxy, TokenManager tokenManager, JoinMeManager joinMeManager, ConfigManager configManager) {
         this.tokenManager = tokenManager;
-        this.config = config;
+        this.joinMeManager = joinMeManager;
+        this.configManager = configManager;
     }
 
     @Override
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
         if (!(source instanceof Player player)) {
-            source.sendMessage(LEGACY.deserialize(config.getString("messages.players_only", "&cThis command can only be used by players.")));
+            source.sendMessage(getMessage("general.players-only"));
             return;
         }
-        if (!player.hasPermission("core.joinme.tokens.view")) {
-            player.sendMessage(LEGACY.deserialize(config.getString("messages.no_permission", "&cYou do not have permission to use this command.")));
+        if (!player.hasPermission("velocitycore.tokens.view")) {
+            player.sendMessage(getMessage("general.no-permission"));
             return;
         }
 
         tokenManager.getPlayerData(player.getUniqueId()).thenAccept(data -> {
             if (data == null) {
-                player.sendMessage(LEGACY.deserialize(config.getString("messages.tokens.error", "&cCould not retrieve token data.")));
+                player.sendMessage(getMessage("tokens.error"));
                 return;
             }
 
             boolean unlimited = tokenManager.hasUnlimitedTokens(player.getUniqueId());
+            long cooldownSeconds = joinMeManager.getCooldown(player.getUniqueId());
 
-            String status    = unlimited ? config.getString("messages.tokens.status_unlimited", "&aUnlimited")
-                             : data.getTotalTokens() > 0 ? config.getString("messages.tokens.status_available", "&aAvailable")
-                             : config.getString("messages.tokens.status_empty", "&cEmpty");
-            String monthly   = unlimited ? config.getString("messages.tokens.unlimited_symbol", "∞") : String.valueOf(data.getMonthlyTokens());
-            String total     = unlimited ? config.getString("messages.tokens.unlimited_symbol", "∞") : String.valueOf(data.getTotalTokens());
-            String permanent = unlimited ? config.getString("messages.tokens.unlimited_symbol", "∞") : String.valueOf(data.getPermanentTokens());
-            String cooldown  = player.hasPermission("core.joinme.cooldown.bypass")
-                             ? config.getString("messages.tokens.cooldown_bypassed", "&aBypassed") : config.getString("messages.tokens.cooldown_default", "5 minutes");
+            String status;
+            if (unlimited) {
+                status = getMessage("tokens.status.unlimited").toString();
+            } else if (data.getTotalTokens() > 0) {
+                status = getMessage("tokens.status.available").toString();
+            } else {
+                status = getMessage("tokens.status.empty").toString();
+            }
 
-            List<String> lines = config.getStringList("messages.tokens.info", List.of(
-                "&c&lGraviJet &7» &f&lJoinMe Tokens",
-                "&cStatus&8:    &f{status}",
-                "&cTotal&8:     &f{total}",
-                "&cMonthly&8:   &f{monthly} &8(&7resets monthly&8)",
-                "&cPermanent&8: &f{permanent} &8(&7never expires&8)",
-                "&cCooldown&8:  &f{cooldown}"
+            String total = unlimited ? "∞" : String.valueOf(data.getTotalTokens());
+            String monthly = unlimited ? "∞" : String.valueOf(data.getMonthlyTokens());
+            String permanent = unlimited ? "∞" : String.valueOf(data.getPermanentTokens());
+            
+            String cooldown;
+            if (player.hasPermission("velocitycore.joinme.cooldown.bypass")) {
+                cooldown = getMessage("tokens.cooldown.bypassed").toString();
+            } else if (cooldownSeconds > 0) {
+                cooldown = formatDuration(cooldownSeconds);
+            } else {
+                cooldown = getMessage("tokens.cooldown.ready").toString();
+            }
+
+            player.sendMessage(getMessage("tokens.info",
+                    Placeholder.unparsed("status", status),
+                    Placeholder.unparsed("total", total),
+                    Placeholder.unparsed("monthly", monthly),
+                    Placeholder.unparsed("permanent", permanent),
+                    Placeholder.unparsed("cooldown", cooldown)
             ));
 
-            Component built = Component.empty();
-            for (String line : lines) {
-                String resolved = line
-                        .replace("{status}",    status)
-                        .replace("{total}",     total)
-                        .replace("{monthly}",   monthly)
-                        .replace("{permanent}", permanent)
-                        .replace("{cooldown}",  cooldown);
-                if (!built.equals(Component.empty())) built = built.append(Component.newline());
-                built = built.append(LEGACY.deserialize(resolved));
+            String storeLink = configManager.getMessages().node("tokens", "store-link").getString();
+            if (storeLink != null && !storeLink.isEmpty()) {
+                player.sendMessage(miniMessage.deserialize(storeLink));
             }
-            player.sendMessage(built);
-
-            String storeLinkMessage = config.getString("messages.tokens.store_link_text", "&a&l[STORE] &fClick here to get more tokens!");
-            String storeLinkUrl = config.getString("messages.tokens.store_link_url", "https://store.example.com");
-            Component link = LEGACY.deserialize(storeLinkMessage)
-                    .clickEvent(ClickEvent.openUrl(storeLinkUrl));
-            player.sendMessage(link);
         });
+    }
+
+    private String formatDuration(long seconds) {
+        long minutes = TimeUnit.SECONDS.toMinutes(seconds);
+        long remainingSeconds = seconds - TimeUnit.MINUTES.toSeconds(minutes);
+        return String.format("%d:%02d", minutes, remainingSeconds);
+    }
+
+    private Component getMessage(String path, TagResolver... resolvers) {
+        String template = configManager.getMessages().node(path.split("\\.")).getString("");
+        if (template == null || template.isEmpty()) {
+            return Component.text("Error: Message for " + path + " not found.").color(net.kyori.adventure.text.format.NamedTextColor.RED);
+        }
+        return miniMessage.deserialize(template, resolvers);
     }
 
     @Override
     public boolean hasPermission(Invocation invocation) {
-        return invocation.source() instanceof Player p && p.hasPermission("core.joinme.tokens.view");
+        return invocation.source().hasPermission("velocitycore.tokens.view");
     }
 }

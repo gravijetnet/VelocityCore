@@ -5,76 +5,87 @@ import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.managers.JoinMeManager;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import org.spongepowered.configurate.ConfigurationNode;
 
 import java.util.List;
 
 public class JoinMeColorCommand implements SimpleCommand {
 
-    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
-
     private final JoinMeManager joinMeManager;
-    private final ConfigManager config;
+    private final ConfigManager configManager;
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public JoinMeColorCommand(JoinMeManager joinMeManager, ConfigManager config) {
+    public JoinMeColorCommand(JoinMeManager joinMeManager, ConfigManager configManager) {
         this.joinMeManager = joinMeManager;
-        this.config = config;
+        this.configManager = configManager;
     }
 
     @Override
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
         if (!(source instanceof Player player)) {
-            source.sendMessage(LEGACY.deserialize(config.getString("messages.players_only", "&cThis command can only be used by players.")));
+            source.sendMessage(getMessage("general.players-only"));
+            return;
+        }
+
+        if (!player.hasPermission("velocitycore.joinme.color")) {
+            player.sendMessage(getMessage("general.no-permission"));
             return;
         }
 
         String[] args = invocation.arguments();
         if (args.length == 0) {
-            player.sendMessage(LEGACY.deserialize(config.getString("messages.joinme.color.usage", "&cUsage: /joinmecolor <color|reset>")));
+            player.sendMessage(getMessage("joinme-color.usage"));
             return;
         }
 
-        String raw = String.join(" ", args).trim();
+        String rawColor = String.join(" ", args).trim();
 
-        if (raw.equalsIgnoreCase("reset")) {
+        if (rawColor.equalsIgnoreCase("reset")) {
             joinMeManager.setPlayerColor(player.getUniqueId(), null);
-            player.sendMessage(LEGACY.deserialize(config.getString("messages.joinme.color.reset", "&aYour JoinMe color has been reset.")));
+            player.sendMessage(getMessage("joinme-color.reset"));
             return;
         }
 
-        String normalized = raw.replace('&', '\u00a7');
-        joinMeManager.setPlayerColor(player.getUniqueId(), normalized);
+        // Basic validation for MiniMessage tags
+        if (!rawColor.matches("<#[0-9a-fA-F]{6}>") && !rawColor.matches("<[a-zA-Z_]+>")) {
+             player.sendMessage(getMessage("joinme-color.usage"));
+             return;
+        }
 
-        String sectionSeq = joinMeManager.formatToSectionColor(normalized);
-        String visible = stripFormatting(normalized);
-        if (visible.isEmpty()) visible = "[preview]";
+        joinMeManager.setPlayerColor(player.getUniqueId(), rawColor);
 
-        String preview = sectionSeq + visible;
-        player.sendMessage(LEGACY.deserialize(config.getString("messages.joinme.color.set", "&aYour JoinMe color has been set to: {preview}").replace("{preview}", preview)));
+        Component preview = miniMessage.deserialize(rawColor + "preview");
+        player.sendMessage(getMessage("joinme-color.set", Placeholder.component("preview", preview)));
     }
 
-    private String stripFormatting(String input) {
-        if (input == null || input.isEmpty()) return "";
-        String s = input.replace('&', '\u00a7');
-        s = s.replaceAll("(?i)\u00a7x(\u00a7[0-9A-Fa-f]){6}", "");
-        s = s.replaceAll("(?i)\u00a7#[0-9A-Fa-f]{6}", "");
-        s = s.replaceAll("(?i)#[0-9A-Fa-f]{6}", "");
-        s = s.replaceAll("(?i)\u00a7[0-9A-FK-OR]", "");
-        s = s.replace("\u00a7", "");
-        return s;
+    private Component getMessage(String path, net.kyori.adventure.text.minimessage.tag.resolver.TagResolver... resolvers) {
+        String template = getMessageNode(path).getString("");
+        return miniMessage.deserialize(template, resolvers);
+    }
+
+    private ConfigurationNode getMessageNode(String path) {
+        Object[] parts = path.split("\\.");
+        return configManager.getMessages().node(parts);
     }
 
     @Override
     public List<String> suggest(Invocation invocation) {
-        if (!invocation.source().hasPermission("core.joinme.use")) return List.of();
+        if (!invocation.source().hasPermission("velocitycore.joinme.color")) return List.of();
         String[] args = invocation.arguments();
-        if (args.length == 1 && "reset".startsWith(args[0].toLowerCase())) return List.of("reset");
+        if (args.length <= 1) {
+            if ("reset".startsWith(args.length == 1 ? args[0].toLowerCase() : "")) {
+                return List.of("reset");
+            }
+        }
         return List.of();
     }
 
     @Override
     public boolean hasPermission(Invocation invocation) {
-        return invocation.source().hasPermission("core.joinme.use");
+        return invocation.source().hasPermission("velocitycore.joinme.color");
     }
 }

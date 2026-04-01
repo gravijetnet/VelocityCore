@@ -8,20 +8,19 @@ import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
+import net.gravijet.velocity.core.commands.*;
+import net.gravijet.velocity.core.database.DatabaseManager;
+import net.gravijet.velocity.core.database.PlayerDataDAO;
 import net.gravijet.velocity.core.logger.PlayerLogger;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import net.gravijet.velocity.core.command.ReloadCommand;
-import net.gravijet.velocity.core.util.AdvertisingManager;
-import net.gravijet.velocity.core.util.ConfigManager;
-import net.gravijet.velocity.core.support.SupportPlugin;
-import net.gravijet.velocity.core.commands.*;
-import net.gravijet.velocity.core.database.DatabaseManager;
-import net.gravijet.velocity.core.database.PlayerDataDAO;
 import net.gravijet.velocity.core.managers.JoinMeManager;
 import net.gravijet.velocity.core.managers.TokenManager;
+import net.gravijet.velocity.core.support.SupportPlugin;
+import net.gravijet.velocity.core.util.AdvertisingManager;
+import net.gravijet.velocity.core.util.ConfigManager;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
@@ -39,10 +38,9 @@ public class Main {
     private final ProxyServer proxy;
     private final Logger logger;
     private final Path dataDirectory;
-
     private ConfigManager configManager;
-    private AdvertisingManager advertisingManager;
 
+    private AdvertisingManager advertisingManager;
     private TokenManager tokenManager;
     private JoinMeManager joinMeManager;
     private PlayerDataDAO playerDataDAO;
@@ -55,32 +53,36 @@ public class Main {
         this.logger = logger;
         this.dataDirectory = dataDirectory;
         instance = this;
-        this.configManager = new ConfigManager(proxy, logger, dataDirectory);
     }
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
         try {
-            Class.forName("com.mysql.cj.jdbc.Driver");
-            DatabaseManager databaseManager = new DatabaseManager();
-            this.playerDataDAO = new PlayerDataDAO(databaseManager);
-            this.tokenManager = new TokenManager(databaseManager, proxy);
+            // Initialize Managers
+            this.configManager = new ConfigManager(proxy, dataDirectory);
+            this.tokenManager = new TokenManager(new DatabaseManager(), proxy);
             this.joinMeManager = new JoinMeManager(this, proxy, tokenManager, configManager);
-
             this.advertisingManager = new AdvertisingManager(this, proxy, configManager);
-            this.advertisingManager.start();
-
-            CommandManager cmd = proxy.getCommandManager();
-            cmd.register(cmd.metaBuilder("ping").aliases("velocityping").build(), new PingCommand(proxy, configManager));
-            cmd.register(cmd.metaBuilder("joinme").build(), new JoinMeCommand(proxy, tokenManager, joinMeManager, configManager));
-            cmd.register(cmd.metaBuilder("adminjoinme").aliases("ajm").build(), new AdminJoinMeCommand(proxy, tokenManager, joinMeManager, configManager));
-            cmd.register(cmd.metaBuilder("tokens").build(), new TokensCommand(proxy, tokenManager, configManager));
-            cmd.register(cmd.metaBuilder("joinmecolor").aliases("jmc").build(), new JoinMeColorCommand(joinMeManager, configManager));
-            cmd.register(cmd.metaBuilder("find").build(), new FindCommand(proxy, playerDataDAO, configManager));
-            cmd.register(cmd.metaBuilder("vcore").aliases("velocitycore").build(), new ReloadCommand(this));
-
+            this.playerDataDAO = new PlayerDataDAO(new DatabaseManager());
             this.playerLogger = new PlayerLogger(dataDirectory);
 
+            // Start Services
+            this.advertisingManager.start();
+
+            // Register Commands
+            CommandManager cmd = proxy.getCommandManager();
+            cmd.register(cmd.metaBuilder("joinme").build(), new JoinMeCommand(proxy, tokenManager, joinMeManager, configManager));
+            cmd.register(cmd.metaBuilder("adminjoinme").aliases("ajm").build(), new AdminJoinMeCommand(proxy, tokenManager, joinMeManager, configManager));
+            cmd.register(cmd.metaBuilder("tokens").build(), new TokensCommand(proxy, tokenManager, joinMeManager, configManager));
+            cmd.register(cmd.metaBuilder("vcore").aliases("velocitycore").build(), new ReloadCommand(this));
+            
+            // Other commands - can be refactored later if needed
+            cmd.register(cmd.metaBuilder("ping").aliases("velocityping").build(), new PingCommand(proxy, configManager));
+            cmd.register(cmd.metaBuilder("joinmecolor").aliases("jmc").build(), new JoinMeColorCommand(joinMeManager, configManager));
+            cmd.register(cmd.metaBuilder("find").build(), new FindCommand(proxy, playerDataDAO, configManager));
+
+
+            // Initialize Support Plugin
             this.supportPlugin = new SupportPlugin(proxy, logger, dataDirectory, this);
             supportPlugin.onProxyInit();
 
@@ -153,8 +155,8 @@ public class Main {
         return configManager;
     }
 
-    public void reloadConfig() {
-        configManager.loadConfig();
+    public void reload() {
+        configManager.load();
         if (advertisingManager != null) {
             advertisingManager.start();
         }

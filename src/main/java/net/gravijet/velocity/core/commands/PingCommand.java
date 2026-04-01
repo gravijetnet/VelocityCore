@@ -5,21 +5,23 @@ import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.util.ConfigManager;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import org.spongepowered.configurate.ConfigurationNode;
 
 import java.util.List;
 import java.util.Optional;
 
 public class PingCommand implements SimpleCommand {
 
-    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
-
     private final ProxyServer proxy;
-    private final ConfigManager config;
+    private final ConfigManager configManager;
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public PingCommand(ProxyServer proxy, ConfigManager config) {
+    public PingCommand(ProxyServer proxy, ConfigManager configManager) {
         this.proxy = proxy;
-        this.config = config;
+        this.configManager = configManager;
     }
 
     @Override
@@ -27,44 +29,58 @@ public class PingCommand implements SimpleCommand {
         CommandSource source = invocation.source();
         String[] args = invocation.arguments();
 
-        Player target;
-        if (args.length > 0) {
-            Optional<Player> opt = proxy.getPlayer(args[0]);
-            if (opt.isEmpty()) {
-                source.sendMessage(LEGACY.deserialize(config.getString("messages.player_not_found", "&cPlayer {player} not found.").replace("{player}", args[0])));
-                return;
+        if (args.length == 0) {
+            if (source instanceof Player player) {
+                sendPing(source, player);
+            } else {
+                source.sendMessage(getMessage("ping.console"));
             }
-            target = opt.get();
-        } else {
-            if (!(source instanceof Player p)) {
-                source.sendMessage(LEGACY.deserialize(config.getString("messages.ping.console", "&cYou must specify a player.")));
-                return;
-            }
-            target = p;
+            return;
         }
 
-        int ping = (int) Math.max(0, target.getPing());
-        String color = ping <= 70 ? "&a" : ping <= 200 ? "&6" : "&c";
+        proxy.getPlayer(args[0]).ifPresentOrElse(
+                target -> sendPing(source, target),
+                () -> source.sendMessage(getMessage("general.player-not-found", Placeholder.unparsed("player", args[0])))
+        );
+    }
 
-        boolean isSelf = source instanceof Player p && p.getUniqueId().equals(target.getUniqueId());
-        String template = isSelf ? config.getString("messages.ping.self", "&fYour ping is {color}{ping}ms&f.") : config.getString("messages.ping.other", "&f{player}''s ping is {color}{ping}ms&f.");
-        String msg = template
-                .replace("{color}", color)
-                .replace("{ping}", String.valueOf(ping))
-                .replace("{player}", target.getUsername());
+    private void sendPing(CommandSource source, Player target) {
+        long ping = target.getPing();
+        String color = ping <= 70 ? "<green>" : ping <= 200 ? "<yellow>" : "<red>";
 
-        source.sendMessage(LEGACY.deserialize(msg));
+        boolean isSelf = source.equals(target);
+        String messageKey = isSelf ? "ping.self" : "ping.other";
+
+        source.sendMessage(getMessage(messageKey,
+                Placeholder.unparsed("player", target.getUsername()),
+                Placeholder.unparsed("ping", String.valueOf(ping)),
+                Placeholder.unparsed("color", color)
+        ));
+    }
+
+    private Component getMessage(String path, net.kyori.adventure.text.minimessage.tag.resolver.TagResolver... resolvers) {
+        String template = getMessageNode(path).getString("");
+        return miniMessage.deserialize(template, resolvers);
+    }
+
+    private ConfigurationNode getMessageNode(String path) {
+        Object[] parts = path.split("\\.");
+        return configManager.getMessages().node(parts);
     }
 
     @Override
     public List<String> suggest(Invocation invocation) {
-        return proxy.getAllPlayers().stream().map(Player::getUsername).toList();
+        if (invocation.arguments().length <= 1) {
+            return proxy.getAllPlayers().stream()
+                    .map(Player::getUsername)
+                    .filter(name -> invocation.arguments().length == 0 || name.toLowerCase().startsWith(invocation.arguments()[0].toLowerCase()))
+                    .toList();
+        }
+        return List.of();
     }
 
     @Override
     public boolean hasPermission(Invocation invocation) {
-        CommandSource src = invocation.source();
-        if (!(src instanceof Player)) return true;
-        return src.hasPermission("core.ping") || src.hasPermission("core.*");
+        return invocation.source().hasPermission("velocitycore.ping");
     }
 }

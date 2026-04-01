@@ -1,0 +1,63 @@
+# Messages for VelocityCore
+# Uses MiniMessage format: https://docs.adventure.kyori.net/minimessage/format.html
+
+prefix: "<#ff0000>&lGraviJet <dark_gray>» <white>"
+
+general:
+  no-permission: "<red>You do not have permission to use this command.</red>"
+  players-only: "<red>This command can only be used by players.</red>"
+  player-not-found: "<red>Player <white><player></white> not found.</red>"
+  invalid-amount: "<red>Invalid amount specified.</red>"
+
+reload:
+  success: "<green>Configuration reloaded successfully.</green>"
+  failure: "<red>Failed to reload configuration.</red>"
+
+joinme:
+  no-perm: "<red>You do not have permission to use JoinMe.</red>"
+  status_format: |-
+    <prefix><bold>JoinMe Tokens</bold>
+    <red>Status<dark_gray>:    <white>{status}
+    <red>Total<dark_gray>:     <white>{total}
+    <red>Monthly<dark_gray>:   <white>{monthly} <dark_gray>(<gray>resets monthly</gray>)
+    <red>Permanent<dark_gray>: <white>{permanent} <dark_gray>(<gray>never expires</gray>)
+    <red>Cooldown<dark_gray>:  <white>{cooldown}"
+  on_cooldown: "<red>You are on cooldown for another {cooldown} seconds.</red>"
+  no_tokens: "<red>You do not have enough JoinMe tokens.</red>"
+  broadcast: "<aqua>{player} has activated a JoinMe! Click here to join their server!</aqua>"
+
+tokens:
+  error: "<red>Could not retrieve your token data.</red>"
+  status:
+    unlimited: "<green>Unlimited</green>"
+    available: "<green>Available</green>"
+    empty: "<red>Out of tokens</red>"
+  cooldown:
+    bypassed: "<green>Bypassed</green>"
+    ready: "<green>Ready</green>"
+  info: |-
+    <#ff0000>&lGraviJet <dark_gray>» <white>&lJoinMe Tokens
+    <#ff0000>Status<dark_gray>:    <white><status>
+    <#ff0000>Total<dark_gray>:     <white><total>
+    <#ff0000>Monthly<dark_gray>:   <white><monthly> <dark_gray>(resets monthly)
+    <#ff0000>Permanent<dark_gray>: <white><permanent> <dark_gray>(never expires)
+    <#ff0000>Cooldown<dark_gray>:  <white><cooldown>
+  store-link: "<gold>Click here to buy more tokens!</gold><click:open_url:'https://example.invalid'>"
+
+admin-joinme:
+  help:
+    - "<prefix><bold>AdminJoinMe Help</bold>"
+    - "<gray>/ajm tokens <player> - View a player's tokens."
+    - "<gray>/ajm forcejoinme <player> - Force a JoinMe for a player."
+    - "<gray>/ajm addtokens <player> <amount> - Add permanent tokens to a player."
+    - "<gray>/ajm removetokens <player> <amount> - Remove permanent tokens from a player."
+  tokens-header: "<prefix>Tokens for <white><player></white>"
+  tokens-error: "<red>Could not retrieve token data for that player.</red>"
+  force-success: "<green>Successfully forced a JoinMe for <white><player></white>.</green>"
+  force-received: "<green>An admin has activated a JoinMe for you.</green>"
+  add-success: "<green>Added <white><amount></white> permanent tokens to <white><player></white>.</green>"
+  add-received: "<green>An admin has given you <white><amount></white> permanent tokens.</green>"
+  add-failed: "<red>Failed to add tokens.</red>"
+  remove-success: "<green>Removed <white><amount></white> permanent tokens from <white><player></white>.</green>"
+  remove-received: "<red>An admin has removed <white><amount></white> permanent tokens from you.</red>"
+  remove-failed: "<red>Failed to remove tokens.</red>"

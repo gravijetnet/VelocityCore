@@ -5,69 +5,85 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.database.PlayerDataDAO;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import org.spongepowered.configurate.ConfigurationNode;
 
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-import java.util.Optional;
 
 public class FindCommand implements SimpleCommand {
 
-    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm");
 
     private final ProxyServer proxy;
     private final PlayerDataDAO playerDataDAO;
-    private final ConfigManager config;
+    private final ConfigManager configManager;
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public FindCommand(ProxyServer proxy, PlayerDataDAO playerDataDAO, ConfigManager config) {
+    public FindCommand(ProxyServer proxy, PlayerDataDAO playerDataDAO, ConfigManager configManager) {
         this.proxy = proxy;
         this.playerDataDAO = playerDataDAO;
-        this.config = config;
+        this.configManager = configManager;
     }
 
     @Override
     public void execute(Invocation invocation) {
-        if (!invocation.source().hasPermission("core.staff.find")) {
-            invocation.source().sendMessage(LEGACY.deserialize(config.getString("messages.no_permission", "&cYou do not have permission.")));
+        if (!invocation.source().hasPermission("velocitycore.find")) {
+            invocation.source().sendMessage(getMessage("general.no-permission"));
             return;
         }
         if (invocation.arguments().length == 0) {
-            invocation.source().sendMessage(LEGACY.deserialize(config.getString("messages.find.usage", "&cUsage: /find <player>")));
+            invocation.source().sendMessage(getMessage("find.usage"));
             return;
         }
 
         String playerName = invocation.arguments()[0];
-        Optional<Player> online = proxy.getPlayer(playerName);
 
-        if (online.isPresent()) {
-            Player p = online.get();
-            String server = p.getCurrentServer().map(s -> s.getServerInfo().getName()).orElse("unknown");
-            invocation.source().sendMessage(LEGACY.deserialize(
-                    config.getString("messages.find.online", "&a{player} is online on {server}.")
-                            .replace("{player}", p.getUsername())
-                            .replace("{server}", server)));
-        } else {
+        proxy.getPlayer(playerName).ifPresentOrElse(player -> {
+            String server = player.getCurrentServer().map(s -> s.getServerInfo().getName()).orElse("unknown");
+            invocation.source().sendMessage(getMessage("find.online",
+                    Placeholder.unparsed("player", player.getUsername()),
+                    Placeholder.unparsed("server", server)
+            ));
+        }, () -> {
             playerDataDAO.getPlayerDataByName(playerName).thenAccept(data -> {
                 if (data != null) {
                     String time = DATE_FORMAT.format(new Date(data.getLastOnline()));
-                    invocation.source().sendMessage(LEGACY.deserialize(
-                            config.getString("messages.find.offline", "&c{player} was last seen on {server} at {time}.")
-                                    .replace("{player}", data.getUsername())
-                                    .replace("{server}", data.getLastServer() != null ? data.getLastServer() : "unknown")
-                                    .replace("{time}", time)));
+                    invocation.source().sendMessage(getMessage("find.offline",
+                            Placeholder.unparsed("player", data.getUsername()),
+                            Placeholder.unparsed("server", data.getLastServer() != null ? data.getLastServer() : "unknown"),
+                            Placeholder.unparsed("time", time)
+                    ));
                 } else {
-                    invocation.source().sendMessage(LEGACY.deserialize(config.getString("messages.player_not_found", "&cPlayer {player} not found.").replace("{player}", playerName)));
+                    invocation.source().sendMessage(getMessage("general.player-not-found", Placeholder.unparsed("player", playerName)));
                 }
             });
-        }
+        });
+    }
+
+    private Component getMessage(String path, net.kyori.adventure.text.minimessage.tag.resolver.TagResolver... resolvers) {
+        String template = getMessageNode(path).getString("");
+        return miniMessage.deserialize(template, resolvers);
+    }
+
+    private ConfigurationNode getMessageNode(String path) {
+        Object[] parts = path.split("\\.");
+        return configManager.getMessages().node(parts);
     }
 
     @Override
     public List<String> suggest(Invocation invocation) {
-        if (!invocation.source().hasPermission("core.staff.find")) return Collections.emptyList();
-        return proxy.getAllPlayers().stream().map(Player::getUsername).toList();
+        if (!invocation.source().hasPermission("velocitycore.find")) return Collections.emptyList();
+        if (invocation.arguments().length <= 1) {
+            return proxy.getAllPlayers().stream()
+                    .map(Player::getUsername)
+                    .filter(name -> invocation.arguments().length == 0 || name.toLowerCase().startsWith(invocation.arguments()[0].toLowerCase()))
+                    .toList();
+        }
+        return Collections.emptyList();
     }
 }
