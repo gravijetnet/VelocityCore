@@ -58,8 +58,8 @@ public class Main {
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
         try {
-            // Force-load the shaded driver class
-            Class.forName("net.gravijet.velocity.core.libs.mysql.cj.jdbc.Driver");
+            // Force-load the MySQL JDBC driver
+            Class.forName("com.mysql.cj.jdbc.Driver");
 
             // Initialize Managers
             this.configManager = new ConfigManager(proxy, dataDirectory);

@@ -234,6 +234,102 @@ public class SupportManager {
         return true;
     }
 
+    public boolean claimSupportFromDiscord(String discordStaffId, String staffName, String playerName, boolean force) {
+        Optional<Player> targetOpt = plugin.getServer().getPlayer(playerName);
+        if (targetOpt.isEmpty()) return false;
+
+        UUID sessionId = playerToSession.get(targetOpt.get().getUniqueId());
+        if (sessionId == null) return false;
+
+        SupportSession session = activeSessions.get(sessionId);
+        if (session == null) return false;
+
+        UUID existingDiscordSession = discordStaffToSession.get(discordStaffId);
+        if (existingDiscordSession != null && !existingDiscordSession.equals(sessionId)) return false;
+
+        boolean alreadyClaimed = session.getStaffId() != null || discordStaffToSession.containsValue(sessionId);
+        if (alreadyClaimed && !force) return false;
+
+        session.setStaffName(staffName);
+        session.setDiscordOnly(true);
+        discordStaffToSession.put(discordStaffId, sessionId);
+        sessionLastActivity.put(sessionId, Instant.now());
+
+        targetOpt.get().sendMessage(getMessage("support.claimed-by-staff", Placeholder.unparsed("staff", staffName)));
+        logSessionAction(session, "CLAIMED_DISCORD", "Claimed by Discord user " + staffName);
+        return true;
+    }
+
+    public void closeSupportSession(Player closer) {
+        boolean isStaff = hasPermission(closer, getStaffPermission());
+        UUID sessionId = isStaff ? staffToSession.get(closer.getUniqueId()) : playerToSession.get(closer.getUniqueId());
+
+        if (sessionId == null) {
+            closer.sendMessage(getMessage("support.no-open-ticket"));
+            return;
+        }
+        SupportSession session = activeSessions.get(sessionId);
+        if (session == null) {
+            closer.sendMessage(getMessage("support.no-open-ticket"));
+            return;
+        }
+
+        session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
+            staff.sendMessage(getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
+            staffToSession.remove(staff.getUniqueId());
+        });
+
+        discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
+        playerToSession.remove(session.getPlayerId());
+
+        Optional<Player> playerOpt = plugin.getServer().getPlayer(session.getPlayerId());
+        if (playerOpt.isPresent()) {
+            playerOpt.get().sendMessage(getMessage("support.ticket-closed"));
+            sendRatingPrompt(playerOpt.get(), session);
+        } else {
+            pendingNotifications.put(session.getPlayerId(), new ClosedSessionNotification(sessionId, Instant.now(), session.getLanguage()));
+        }
+
+        logSessionAction(session, "CLOSED", "Closed by " + closer.getUsername());
+        finalizeSession(session);
+
+        if (plugin.getDiscordBot() != null) {
+            plugin.getDiscordBot().closeSupportChannel(session.getSessionId().toString(), session.getLanguage(), session.getPlayerName(), session.getCreatedAt());
+        }
+    }
+
+    public boolean closeSupportSessionFromDiscord(String discordStaffId) {
+        UUID sessionId = discordStaffToSession.get(discordStaffId);
+        if (sessionId == null) return false;
+
+        SupportSession session = activeSessions.get(sessionId);
+        if (session == null) return false;
+
+        session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
+            staff.sendMessage(getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
+            staffToSession.remove(staff.getUniqueId());
+        });
+
+        discordStaffToSession.remove(discordStaffId);
+        playerToSession.remove(session.getPlayerId());
+
+        Optional<Player> playerOpt = plugin.getServer().getPlayer(session.getPlayerId());
+        if (playerOpt.isPresent()) {
+            playerOpt.get().sendMessage(getMessage("support.ticket-closed"));
+            sendRatingPrompt(playerOpt.get(), session);
+        } else {
+            pendingNotifications.put(session.getPlayerId(), new ClosedSessionNotification(sessionId, Instant.now(), session.getLanguage()));
+        }
+
+        logSessionAction(session, "CLOSED_DISCORD", "Closed by Discord team member");
+        finalizeSession(session);
+
+        if (plugin.getDiscordBot() != null) {
+            plugin.getDiscordBot().closeSupportChannel(session.getSessionId().toString(), session.getLanguage(), session.getPlayerName(), session.getCreatedAt());
+        }
+        return true;
+    }
+
     public void handleSupportChat(Player sender, String message) {
         boolean isStaff = hasPermission(sender, getStaffPermission());
         UUID sessionId = isStaff ? staffToSession.get(sender.getUniqueId()) : playerToSession.get(sender.getUniqueId());
@@ -273,6 +369,127 @@ public class SupportManager {
         }
     }
 
+    public void handleSupportChatFromDiscord(String discordStaffId, String message) {
+        UUID sessionId = discordStaffToSession.get(discordStaffId);
+        if (sessionId == null) return;
+        SupportSession session = activeSessions.get(sessionId);
+        if (session == null) return;
+
+        sessionLastActivity.put(sessionId, Instant.now());
+
+        Component chatMessage = getMessage("support.staff-chat-format",
+                Placeholder.unparsed("player", "Discord"),
+                Placeholder.unparsed("message", message)
+        );
+
+        plugin.getServer().getPlayer(session.getPlayerId())
+                .ifPresent(p -> p.sendMessage(chatMessage));
+
+        session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer)
+                .ifPresent(s -> s.sendMessage(chatMessage));
+
+        logSessionChat(session, "Discord/" + discordStaffId, message);
+    }
+
+    private void sendRatingPrompt(Player player, SupportSession session) {
+        player.sendMessage(getMessage("support.rating-prompt"));
+        Component row = Component.empty();
+        for (int i = 1; i <= 5; i++) {
+            Component btn = Component.text("[" + i + "]")
+                    .color(net.kyori.adventure.text.format.TextColor.color(0x5865F2))
+                    .hoverEvent(HoverEvent.showText(Component.text(i + "/5")))
+                    .clickEvent(ClickEvent.runCommand("/support rate " + i));
+            row = row.append(btn).append(Component.text(" "));
+        }
+        player.sendMessage(row);
+    }
+
+    public void rateSupport(Player player, int rating) {
+        if (rating < 1 || rating > 5) {
+            player.sendMessage(getMessage("support.invalid-rating"));
+            return;
+        }
+
+        UUID lastSessionId = playerToLastClosed.get(player.getUniqueId());
+        SupportSession session = lastSessionId != null ? closedSessions.get(lastSessionId) : null;
+
+        if (session == null) {
+            player.sendMessage(getMessage("support.not-session-player"));
+            return;
+        }
+
+        if (ratedSessions.containsKey(session.getSessionId())) {
+            player.sendMessage(getMessage("support.already-rated"));
+            return;
+        }
+        if (session.getClosedAt() != null && session.getClosedAt().plusSeconds(3600).isBefore(Instant.now())) {
+            player.sendMessage(getMessage("support.rating-expired"));
+            return;
+        }
+
+        String staffName = session.getStaffName() != null ? session.getStaffName() : "Unknown";
+        ratedSessions.put(session.getSessionId(), new RatedSession(session.getSessionId(), rating, Instant.now(), staffName));
+        player.sendMessage(getMessage("support.rating-received", Placeholder.unparsed("rating", String.valueOf(rating))));
+
+        session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff ->
+                staff.sendMessage(miniMessage.deserialize("<gray>" + player.getUsername() + " rated this session " + rating + "/5.</gray>")));
+
+        if (plugin.getDiscordBot() != null) {
+            plugin.getDiscordBot().sendRatingEmbedToChannel(session.getSessionId().toString(), rating, player.getUsername(), staffName);
+        }
+
+        logSessionAction(session, "RATED", player.getUsername() + " rated " + rating + "/5");
+    }
+
+    public void handlePlayerJoin(Player player) {
+        ClosedSessionNotification note = pendingNotifications.remove(player.getUniqueId());
+        if (note != null && note.closedAt().plusSeconds(3600).isAfter(Instant.now())) {
+            player.sendMessage(getMessage("support.ticket-auto-closed"));
+            SupportSession dummy = new SupportSession(player.getUniqueId(), player.getUsername(), note.language(), Instant.now());
+            sendRatingPrompt(player, dummy);
+        }
+
+        UUID sessionId = playerToSession.get(player.getUniqueId());
+        if (sessionId != null) {
+            SupportSession session = activeSessions.get(sessionId);
+            if (session != null) {
+                session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
+                    staff.sendMessage(getMessage("support.player-online-status", Placeholder.unparsed("player", player.getUsername())));
+                    if (plugin.getDiscordBot() != null) {
+                        plugin.getDiscordBot().sendStatusMessageToChannel(sessionId.toString(), player.getUsername() + " is online");
+                    }
+                });
+            }
+        }
+    }
+
+    public void handlePlayerLeave(Player player) {
+        UUID sessionId = playerToSession.get(player.getUniqueId());
+        if (sessionId != null) {
+            SupportSession session = activeSessions.get(sessionId);
+            if (session != null) {
+                session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
+                    staff.sendMessage(getMessage("support.player-offline-status", Placeholder.unparsed("player", player.getUsername())));
+                    if (plugin.getDiscordBot() != null) {
+                        plugin.getDiscordBot().sendStatusMessageToChannel(sessionId.toString(), player.getUsername() + " went offline");
+                    }
+                });
+            }
+        }
+    }
+
+    public String getBanMessage(UUID playerId, String lang) {
+        BanEntry ban = bans.get(playerId);
+        if (ban == null) return null;
+        if (ban.isExpired()) {
+            bans.remove(playerId);
+            saveBans();
+            return null;
+        }
+        String timeLeft = ban.getDuration() == Long.MAX_VALUE ? "permanent" : DurationUtil.format(ban.getRemainingMillis());
+        return configManager.getMessages().node("support", "you-are-banned").getString("<red>You are banned from support. Remaining: <duration></red>").replace("<duration>", timeLeft);
+    }
+
     private Component getMessage(String path, TagResolver... resolvers) {
         String template = configManager.getMessages().node(path.split("\\.")).getString("");
         if (template == null || template.isEmpty()) {
@@ -287,15 +504,6 @@ public class SupportManager {
 
     private boolean hasPermission(Player p, String permission) {
         return p.hasPermission(permission) || p.hasPermission("support.*");
-    }
-    
-    private void logSessionAction(String action, String detail) {
-        // Simplified logging, assuming no session context
-        String line = String.format("[%s] %s | %s%n",
-                logFormatter.format(LocalDateTime.now()),
-                action,
-                detail);
-        appendLog("sessions.log", line);
     }
 
     private void logSessionAction(SupportSession session, String action, String detail) {
@@ -328,8 +536,92 @@ public class SupportManager {
             }
         });
     }
-    
-    // ... other methods like ban, unban, rate, etc. would need similar refactoring
+
+    private void loadBans() {
+        if (!bansFile.exists()) return;
+        try {
+            BanEntry[] entries = mapper.readValue(bansFile, BanEntry[].class);
+            int loaded = 0;
+            for (BanEntry ban : entries) {
+                if (!ban.isExpired()) {
+                    bans.put(ban.getPlayerId(), ban);
+                    loaded++;
+                }
+            }
+            plugin.getLogger().info("Loaded {} active ban(s).", loaded);
+        } catch (IOException e) {
+            plugin.getLogger().error("Failed to load bans.json", e);
+        }
+    }
+
+    private void saveBans() {
+        BanEntry[] snapshot = bans.values().toArray(new BanEntry[0]);
+        ioExecutor.execute(() -> {
+            try {
+                mapper.writerWithDefaultPrettyPrinter().writeValue(bansFile, snapshot);
+            } catch (IOException e) {
+                plugin.getLogger().error("Failed to save bans.json", e);
+            }
+        });
+    }
+
+    private void loadLinkedAccounts() {
+        if (!linkedAccountsFile.exists()) return;
+        try {
+            Map<String, String> loaded = mapper.readValue(linkedAccountsFile,
+                    mapper.getTypeFactory().constructMapType(Map.class, String.class, String.class));
+            linkedAccounts.putAll(loaded);
+            plugin.getLogger().info("Loaded {} linked account(s).", linkedAccounts.size());
+        } catch (IOException e) {
+            plugin.getLogger().error("Failed to load linked_accounts.json", e);
+        }
+    }
+
+    private void saveLinkedAccounts() {
+        Map<String, String> snapshot = new HashMap<>(linkedAccounts);
+        ioExecutor.execute(() -> {
+            try {
+                mapper.writerWithDefaultPrettyPrinter().writeValue(linkedAccountsFile, snapshot);
+            } catch (IOException e) {
+                plugin.getLogger().error("Failed to save linked_accounts.json", e);
+            }
+        });
+    }
+
+    public static class StaffStats {
+        public final String staffName;
+        public int totalSessions;
+        private double ratingSum;
+        public final int[] distribution = new int[6];
+
+        public StaffStats(String staffName) { this.staffName = staffName; }
+
+        public void add(int rating) {
+            totalSessions++;
+            ratingSum += rating;
+            if (rating >= 1 && rating <= 5) distribution[rating]++;
+        }
+
+        public double getAverage() { return totalSessions == 0 ? 0.0 : ratingSum / totalSessions; }
+    }
+
+    public Map<String, StaffStats> buildStaffStats() {
+        Map<String, StaffStats> result = new java.util.LinkedHashMap<>();
+        for (RatedSession r : ratedSessions.values()) {
+            String name = r.getStaffName() != null && !r.getStaffName().isEmpty() ? r.getStaffName() : "Unknown";
+            result.computeIfAbsent(name, StaffStats::new).add(r.getRating());
+        }
+        return result;
+    }
+
+    public int getTotalRatedCount() {
+        return ratedSessions.size();
+    }
+
+    public double getGlobalAverageRating() {
+        if (ratedSessions.isEmpty()) return 0.0;
+        return ratedSessions.values().stream().mapToInt(RatedSession::getRating).average().orElse(0.0);
+    }
 
     public record ClosedSessionNotification(UUID sessionId, Instant closedAt, String language) {}
 }

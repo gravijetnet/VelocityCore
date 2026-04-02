@@ -22,8 +22,9 @@ import discord4j.discordjson.json.ApplicationCommandOptionData;
 import discord4j.discordjson.json.ApplicationCommandRequest;
 import discord4j.rest.util.Color;
 import net.gravijet.velocity.core.support.SupportPlugin;
-import net.gravijet.velocity.core.support.config.SupportConfig;
 import net.gravijet.velocity.core.support.manager.SupportManager;
+import net.gravijet.velocity.core.util.ConfigManager;
+import org.spongepowered.configurate.ConfigurationNode;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -34,47 +35,50 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DiscordBot {
     private final SupportPlugin plugin;
-    private final SupportConfig config;
+    private final ConfigManager configManager;
     private final SupportManager manager;
     private GatewayDiscordClient client;
 
-    // Session <-> Channel mapping
-    private final Map<String, TextChannel> sessionToChannel    = new ConcurrentHashMap<>();
-    private final Map<String, String>      channelToSession    = new ConcurrentHashMap<>();
-    private final Map<String, String>      channelToPlayer     = new ConcurrentHashMap<>();
-    private final Map<String, String>      sessionToEmbedMsgId = new ConcurrentHashMap<>();
-    private final Map<String, String>      discordStaffSession = new ConcurrentHashMap<>();
-
-    // Claim tracking: channelId -> Discord user ID / display name
+    private final Map<String, TextChannel> sessionToChannel = new ConcurrentHashMap<>();
+    private final Map<String, String> channelToSession = new ConcurrentHashMap<>();
+    private final Map<String, String> channelToPlayer = new ConcurrentHashMap<>();
+    private final Map<String, String> sessionToEmbedMsgId = new ConcurrentHashMap<>();
+    private final Map<String, String> discordStaffSession = new ConcurrentHashMap<>();
     private final Map<String, String> claimedByUserId = new ConcurrentHashMap<>();
-    private final Map<String, String> claimedByName   = new ConcurrentHashMap<>();
+    private final Map<String, String> claimedByName = new ConcurrentHashMap<>();
 
-    public DiscordBot(SupportPlugin plugin, SupportConfig config, SupportManager manager) {
-        this.plugin  = plugin;
-        this.config  = config;
+    public DiscordBot(SupportPlugin plugin, ConfigManager configManager, SupportManager manager) {
+        this.plugin = plugin;
+        this.configManager = configManager;
         this.manager = manager;
     }
 
     public void start() {
+        ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
+        if (!discordNode.node("enabled").getBoolean(false)) {
+            return;
+        }
         try {
-            String token = config.getDiscordSettings().botToken;
+            String token = discordNode.node("bot-token").getString();
+            if (token == null || token.equals("YOUR_DISCORD_BOT_TOKEN_HERE")) {
+                plugin.getLogger().error("Discord bot token is not set in config.yml. Bot will not start.");
+                return;
+            }
             this.client = DiscordClient.create(token).login().block();
             if (client == null) {
                 plugin.getLogger().error("Discord login failed.");
                 return;
             }
-            // Use reactive handler pattern — handlers return Mono<Void> so Discord4J
-            // can properly propagate errors and backpressure instead of blocking the
-            // event-dispatch thread.
-            client.on(ReadyEvent.class,
-                    e -> Mono.fromRunnable(() -> onReady(e)).subscribeOn(Schedulers.boundedElastic())).subscribe();
+            client.on(ReadyEvent.class, e -> Mono.fromRunnable(() -> onReady(e)).subscribeOn(Schedulers.boundedElastic())).subscribe();
             client.on(ButtonInteractionEvent.class, this::onButtonInteraction).subscribe();
-            client.on(MessageCreateEvent.class,     this::onMessageCreate).subscribe();
+            client.on(MessageCreateEvent.class, this::onMessageCreate).subscribe();
             client.on(ChatInputInteractionEvent.class, this::onSlashCommand).subscribe();
             plugin.getLogger().info("Discord bot started.");
         } catch (Exception e) {
@@ -86,15 +90,16 @@ public class DiscordBot {
         if (client != null) client.logout().block();
     }
 
-    // -------------------------------------------------------------------------
-    // Ready (runs on boundedElastic — blocking OK)
-    // -------------------------------------------------------------------------
-
     private void onReady(ReadyEvent event) {
         plugin.getLogger().info("Discord bot connected as {}.", event.getSelf().getUsername());
-        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
+        String guildId = discordNode.node("guild-id").getString();
+        if (guildId == null) {
+            plugin.getLogger().error("Discord guild-id is not set in config.yml.");
+            return;
+        }
 
-        Guild guild = client.getGuildById(Snowflake.of(cfg.allowedGuildId)).block();
+        Guild guild = client.getGuildById(Snowflake.of(guildId)).block();
         if (guild == null) {
             plugin.getLogger().error("Bot is not in the configured guild. Shutting down.");
             client.logout().block();
@@ -105,7 +110,7 @@ public class DiscordBot {
             Long appId = client.getRestClient().getApplicationId().block();
             if (appId != null) {
                 client.getRestClient().getApplicationService()
-                        .createGuildApplicationCommand(appId, Long.parseLong(cfg.allowedGuildId),
+                        .createGuildApplicationCommand(appId, Long.parseLong(guildId),
                                 ApplicationCommandRequest.builder()
                                         .name("stats")
                                         .description("Show support rating statistics")
@@ -124,10 +129,6 @@ public class DiscordBot {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Button interactions — fully reactive; blocking work on boundedElastic
-    // -------------------------------------------------------------------------
-
     private Mono<Void> onButtonInteraction(ButtonInteractionEvent event) {
         Member member = event.getInteraction().getMember().orElse(null);
         if (member == null) {
@@ -136,7 +137,6 @@ public class DiscordBot {
                             .withEphemeral(true).then());
         }
 
-        // deferReply must complete before any blocking work
         return event.deferReply().withEphemeral(true)
                 .then(hasStaffRoleMono(member))
                 .flatMap(hasRole -> {
@@ -155,13 +155,12 @@ public class DiscordBot {
                 });
     }
 
-    // Runs on boundedElastic — .block() calls inside are safe
     private Mono<Void> handleClaimButton(ButtonInteractionEvent event, Member member) {
         return Mono.fromCallable(() -> {
             String channelId = event.getCustomId().substring(6);
             if (claimedByUserId.containsKey(channelId)) {
                 String claimer = claimedByName.getOrDefault(channelId, "someone");
-                return config.getDiscordSettings().alreadyClaimedMessage.replace("{staff}", claimer);
+                return configManager.getMessages().node("support", "discord", "already-claimed").getString().replace("{staff}", claimer);
             }
 
             String sessionId = channelToSession.get(channelId);
@@ -173,9 +172,8 @@ public class DiscordBot {
                 playerName = ch != null ? extractFromChannelName(ch.getName(), 2) : "unknown";
             }
 
-            String discordId    = member.getId().asString();
-            String linkedMcName = manager.getLinkedMinecraftName(discordId);
-            String claimName    = linkedMcName != null ? linkedMcName : member.getDisplayName();
+            String discordId = member.getId().asString();
+            String claimName = member.getDisplayName();
 
             boolean ok = manager.claimSupportFromDiscord(discordId, claimName, playerName, false);
             if (ok) {
@@ -183,22 +181,21 @@ public class DiscordBot {
                 claimedByName.put(channelId, claimName);
                 discordStaffSession.put(discordId, sessionId);
                 updateChannelToClaimed(sessionId, claimName, discordId);
-                return "You have claimed this support request.";
+                return configManager.getMessages().node("support", "discord", "claim-message").getString().replace("{staff}", claimName);
             }
             return "Could not claim the support request.";
         }).subscribeOn(Schedulers.boundedElastic())
                 .flatMap(msg -> event.createFollowup(msg).withEphemeral(true).then());
     }
 
-    // Runs on boundedElastic — .block() calls inside are safe
     private Mono<Void> handleCloseButton(ButtonInteractionEvent event, Member member) {
         return Mono.fromCallable(() -> {
-            String channelId     = event.getCustomId().substring(6);
+            String channelId = event.getCustomId().substring(6);
             String claimerUserId = claimedByUserId.get(channelId);
 
             if (claimerUserId == null || !claimerUserId.equals(member.getId().asString())) {
                 if (!hasManagementRole(member)) {
-                    return config.getDiscordSettings().onlyClaimerCanClose;
+                    return configManager.getMessages().node("support", "discord", "only-claimer-can-close").getString();
                 }
             }
 
@@ -211,13 +208,9 @@ public class DiscordBot {
                 .flatMap(msg -> event.createFollowup(msg).withEphemeral(true).then());
     }
 
-    // -------------------------------------------------------------------------
-    // Message create (Discord -> Minecraft relay) — fully reactive, no blocking
-    // -------------------------------------------------------------------------
-
     private Mono<Void> onMessageCreate(MessageCreateEvent event) {
         Message msg = event.getMessage();
-        if (msg.getAuthor().map(discord4j.core.object.entity.User::isBot).orElse(true)) {
+        if (msg.getAuthor().map(u -> u.isBot()).orElse(true)) {
             return Mono.empty();
         }
 
@@ -230,7 +223,7 @@ public class DiscordBot {
 
                     if (!claimedByUserId.containsKey(channelId)) {
                         return msg.delete()
-                                .then(channel.createMessage(config.getDiscordSettings().pleaseClaimMessage))
+                                .then(channel.createMessage(configManager.getMessages().node("support", "discord", "please-claim").getString()))
                                 .then();
                     }
 
@@ -244,10 +237,6 @@ public class DiscordBot {
                     return Mono.empty();
                 });
     }
-
-    // -------------------------------------------------------------------------
-    // Slash commands — reactive; chart generation on boundedElastic
-    // -------------------------------------------------------------------------
 
     private Mono<Void> onSlashCommand(ChatInputInteractionEvent event) {
         if (!"stats".equals(event.getCommandName())) return Mono.empty();
@@ -303,19 +292,20 @@ public class DiscordBot {
                 });
     }
 
-    // -------------------------------------------------------------------------
-    // Public API for SupportManager (called from Velocity threads — blocking OK)
-    // -------------------------------------------------------------------------
-
     public void createSupportChannel(String playerName, String serverName, String language, String sessionId) {
-        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
         try {
-            Guild guild = client.getGuildById(Snowflake.of(cfg.allowedGuildId)).block();
+            String guildId = discordNode.node("guild-id").getString();
+            String supportCategoryId = discordNode.node("support-category-id").getString();
+            String channelNameFormat = discordNode.node("channel-name-format").getString("{status}-{language}-{player}-{server}");
+            String openColor = discordNode.node("open-color").getString("BLUE");
+
+            Guild guild = client.getGuildById(Snowflake.of(guildId)).block();
             if (guild == null) return;
-            Category cat = (Category) client.getChannelById(Snowflake.of(cfg.supportCategoryId)).block();
+            Category cat = (Category) client.getChannelById(Snowflake.of(supportCategoryId)).block();
             if (cat == null) return;
 
-            String name = buildChannelName("o", language, playerName, serverName, cfg.channelNameFormat);
+            String name = buildChannelName("o", language, playerName, serverName, channelNameFormat);
             TextChannel channel = guild.createTextChannel(TextChannelCreateSpec.builder()
                     .name(name).parentId(cat.getId()).build()).block();
             if (channel == null) return;
@@ -326,12 +316,12 @@ public class DiscordBot {
             channelToPlayer.put(chId, playerName);
 
             EmbedCreateSpec embed = EmbedCreateSpec.builder()
-                    .color(parseColor(cfg.openColor))
-                    .title("Support Request")
-                    .addField("Player",   playerName,             true)
-                    .addField("Server",   serverName,             true)
+                    .color(parseColor(openColor))
+                    .title(configManager.getMessages().node("support", "discord", "transcript-title").getString("Support Request"))
+                    .addField("Player", playerName, true)
+                    .addField("Server", serverName, true)
                     .addField("Language", language.toUpperCase(), true)
-                    .addField("Status",   "Open",                 true)
+                    .addField("Status", "Open", true)
                     .timestamp(Instant.now())
                     .build();
 
@@ -352,7 +342,8 @@ public class DiscordBot {
     public void updateChannelToClaimed(String sessionId, String staffName, String staffDiscordId) {
         TextChannel channel = sessionToChannel.get(sessionId);
         if (channel == null) return;
-        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
+        String claimedColor = discordNode.node("claimed-color").getString("YELLOW");
         String chId = channel.getId().asString();
 
         String embedId = sessionToEmbedMsgId.get(sessionId);
@@ -360,11 +351,11 @@ public class DiscordBot {
             Message msg = channel.getMessageById(Snowflake.of(embedId)).block();
             if (msg != null) {
                 EmbedCreateSpec newEmbed = EmbedCreateSpec.builder()
-                        .color(parseColor(cfg.claimedColor))
-                        .title("Support Request")
+                        .color(parseColor(claimedColor))
+                        .title(configManager.getMessages().node("support", "discord", "transcript-title").getString("Support Request"))
                         .addField("Player", channelToPlayer.getOrDefault(chId, "?"), true)
-                        .addField("Staff",  staffName,                               true)
-                        .addField("Status", "Claimed",                               true)
+                        .addField("Staff", staffName, true)
+                        .addField("Status", "Claimed", true)
                         .timestamp(Instant.now())
                         .build();
                 msg.edit()
@@ -380,7 +371,7 @@ public class DiscordBot {
         claimedByUserId.put(chId, staffDiscordId);
         claimedByName.put(chId, staffName);
         discordStaffSession.put(staffDiscordId, sessionId);
-        sendToChannel(sessionId, cfg.claimMessage.replace("{staff}", staffName));
+        sendToChannel(sessionId, configManager.getMessages().node("support", "discord", "claim-message").getString().replace("{staff}", staffName));
     }
 
     public void sendMessageToDiscord(String sessionId, String message, String sender, boolean isStaff) {
@@ -396,13 +387,11 @@ public class DiscordBot {
     }
 
     public void sendTransferMessageToChannel(String sessionId, String from, String to) {
-        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
-        sendToChannel(sessionId, cfg.transferMessage.replace("{fromStaff}", from).replace("{toStaff}", to));
+        sendToChannel(sessionId, configManager.getMessages().node("support", "discord", "transfer-message").getString().replace("{fromStaff}", from).replace("{toStaff}", to));
     }
 
     public void sendStatusMessageToChannel(String sessionId, String status) {
-        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
-        sendToChannel(sessionId, cfg.statusMessage.replace("{status}", status));
+        sendToChannel(sessionId, configManager.getMessages().node("support", "discord", "status-message").getString().replace("{status}", status));
     }
 
     public void closeSupportChannel(String sessionId, String language, String playerName, Instant createdAt) {
@@ -428,17 +417,18 @@ public class DiscordBot {
     }
 
     public void sendRatingEmbedToChannel(String sessionId, int rating, String playerName, String staffName) {
-        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
         try {
-            TextChannel channel = (TextChannel) client.getChannelById(Snowflake.of(cfg.transcriptChannelId)).block();
+            String transcriptChannelId = discordNode.node("transcript-channel-id").getString();
+            TextChannel channel = (TextChannel) client.getChannelById(Snowflake.of(transcriptChannelId)).block();
             if (channel == null) return;
 
             EmbedCreateSpec embed = EmbedCreateSpec.builder()
                     .color(ratingColor(rating))
-                    .title("New Rating")
-                    .addField("Player",       playerName,       true)
-                    .addField("Staff Member", staffName,        true)
-                    .addField("Rating",       rating + " / 5",  true)
+                    .title(configManager.getMessages().node("support", "discord", "rating-title").getString("New Rating")) // Assuming a new message key
+                    .addField("Player", playerName, true)
+                    .addField("Staff Member", staffName, true)
+                    .addField("Rating", rating + " / 5", true)
                     .timestamp(Instant.now())
                     .build();
 
@@ -460,13 +450,10 @@ public class DiscordBot {
         discordStaffSession.remove(discordId);
     }
 
-    // -------------------------------------------------------------------------
-    // Transcript
-    // -------------------------------------------------------------------------
-
     private void sendTranscript(TextChannel channel, String sessionId, String language, String playerName, Instant createdAt) throws Exception {
-        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
-        TextChannel transcriptCh = (TextChannel) client.getChannelById(Snowflake.of(cfg.transcriptChannelId)).block();
+        ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
+        String transcriptChannelId = discordNode.node("transcript-channel-id").getString();
+        TextChannel transcriptCh = (TextChannel) client.getChannelById(Snowflake.of(transcriptChannelId)).block();
         if (transcriptCh == null) return;
 
         File file = buildTranscriptFile(channel, sessionId, language, playerName, createdAt);
@@ -476,11 +463,11 @@ public class DiscordBot {
                 LocalDateTime.ofInstant(createdAt, ZoneId.systemDefault()));
 
         EmbedCreateSpec embed = EmbedCreateSpec.builder()
-                .color(Color.of(0x5865F2))
-                .title(cfg.transcriptTitle)
-                .addField(cfg.transcriptPlayerField,   playerName, true)
-                .addField(cfg.transcriptLanguageField, language,   true)
-                .addField(cfg.transcriptDateField,     date,       true)
+                .color(parseColor(discordNode.node("transcript-color").getString("PURPLE")))
+                .title(configManager.getMessages().node("support", "discord", "transcript-title").getString("Support Transcript"))
+                .addField(configManager.getMessages().node("support", "discord", "transcript-player-field").getString("Player"), playerName, true)
+                .addField(configManager.getMessages().node("support", "discord", "transcript-language-field").getString("Language"), language, true)
+                .addField(configManager.getMessages().node("support", "discord", "transcript-date-field").getString("Date"), date, true)
                 .timestamp(Instant.now())
                 .build();
 
@@ -500,7 +487,6 @@ public class DiscordBot {
                             LocalDateTime.ofInstant(createdAt, ZoneId.systemDefault())));
             File f = new File(logDir, fname);
 
-            // Limit to 500 messages to prevent OOM on long-running channels
             List<Message> messages = channel.getMessagesBefore(Snowflake.of(Instant.now()))
                     .take(500)
                     .collectList()
@@ -511,15 +497,15 @@ public class DiscordBot {
             try (FileWriter w = new FileWriter(f)) {
                 w.write("Support Transcript\n");
                 w.write("Player:   " + playerName + "\n");
-                w.write("Language: " + language   + "\n");
+                w.write("Language: " + language + "\n");
                 w.write("Date:     " + DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss").format(
                         LocalDateTime.ofInstant(createdAt, ZoneId.systemDefault())) + "\n");
-                w.write("ID:       " + sessionId  + "\n\n");
+                w.write("ID:       " + sessionId + "\n\n");
                 DateTimeFormatter tf = DateTimeFormatter.ofPattern("HH:mm:ss");
                 for (Message msg : messages) {
-                    String author  = msg.getAuthor().map(u -> u.getUsername()).orElse("?");
+                    String author = msg.getAuthor().map(u -> u.getUsername()).orElse("?");
                     String content = msg.getContent();
-                    String ts      = tf.format(msg.getTimestamp().atZone(ZoneId.systemDefault()));
+                    String ts = tf.format(msg.getTimestamp().atZone(ZoneId.systemDefault()));
                     if (!content.isBlank()) w.write("[" + ts + "] " + author + ": " + content + "\n");
                 }
             }
@@ -530,72 +516,63 @@ public class DiscordBot {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Role helpers
-    // -------------------------------------------------------------------------
-
-    /** Non-blocking reactive role check — use in reactive chains. */
     private Mono<Boolean> hasStaffRoleMono(Member member) {
-        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
+        String staffRoleId = discordNode.node("staff-role-id").getString();
+        String managementRoleId = discordNode.node("management-role-id").getString();
+        if (staffRoleId == null && managementRoleId == null) return Mono.just(false);
+
         return member.getRoles()
-                .any(r -> r.getId().asString().equals(cfg.staffRoleId)
-                        || r.getId().asString().equals(cfg.managementRoleId));
+                .any(r -> (staffRoleId != null && r.getId().asString().equals(staffRoleId)) ||
+                        (managementRoleId != null && r.getId().asString().equals(managementRoleId)));
     }
 
-    /** Blocking role check (uses .any() to short-circuit) — safe on boundedElastic threads. */
-    private boolean hasStaffRole(Member member) {
-        Boolean result = hasStaffRoleMono(member).block();
-        return Boolean.TRUE.equals(result);
-    }
-
-    /** Blocking management-role check — safe on boundedElastic threads. */
     private boolean hasManagementRole(Member member) {
-        SupportConfig.ConfigData.DiscordSettings cfg = config.getDiscordSettings();
+        ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
+        String managementRoleId = discordNode.node("management-role-id").getString();
+        if (managementRoleId == null) return false;
+
         Boolean result = member.getRoles()
-                .any(r -> r.getId().asString().equals(cfg.managementRoleId))
+                .any(r -> r.getId().asString().equals(managementRoleId))
                 .block();
         return Boolean.TRUE.equals(result);
     }
 
-    // -------------------------------------------------------------------------
-    // Misc helpers
-    // -------------------------------------------------------------------------
-
     private Color parseColor(String s) {
         return switch (s == null ? "" : s.toUpperCase()) {
-            case "GREEN"      -> Color.GREEN;
-            case "RED"        -> Color.RED;
-            case "BLUE"       -> Color.BLUE;
-            case "YELLOW"     -> Color.YELLOW;
-            case "ORANGE"     -> Color.ORANGE;
-            case "CYAN"       -> Color.CYAN;
-            case "GRAY"       -> Color.GRAY;
-            case "DARK_GRAY"  -> Color.DARK_GRAY;
+            case "GREEN" -> Color.GREEN;
+            case "RED" -> Color.RED;
+            case "BLUE" -> Color.BLUE;
+            case "YELLOW" -> Color.YELLOW;
+            case "ORANGE" -> Color.ORANGE;
+            case "CYAN" -> Color.CYAN;
+            case "GRAY" -> Color.GRAY;
+            case "DARK_GRAY" -> Color.DARK_GRAY;
             case "LIGHT_GRAY" -> Color.LIGHT_GRAY;
-            case "BLACK"      -> Color.BLACK;
-            case "WHITE"      -> Color.WHITE;
-            case "PURPLE"     -> Color.of(0x9B59B6);
-            default           -> Color.of(0x5865F2);
+            case "BLACK" -> Color.BLACK;
+            case "WHITE" -> Color.WHITE;
+            case "PURPLE" -> Color.of(0x9B59B6);
+            default -> Color.of(0x5865F2);
         };
     }
 
     private Color ratingColor(int r) {
         return switch (r) {
-            case 5  -> Color.GREEN;
-            case 4  -> Color.of(0x57F287);
-            case 3  -> Color.YELLOW;
-            case 2  -> Color.ORANGE;
+            case 5 -> Color.GREEN;
+            case 4 -> Color.of(0x57F287);
+            case 3 -> Color.YELLOW;
+            case 2 -> Color.ORANGE;
             default -> Color.RED;
         };
     }
 
     private String buildChannelName(String status, String lang, String player, String server, String fmt) {
-        String safeName   = player.toLowerCase().replaceAll("[^a-z0-9_]", "");
+        String safeName = player.toLowerCase().replaceAll("[^a-z0-9_]", "");
         String safeServer = server.toLowerCase().replaceAll("[^a-z0-9_-]", "");
-        String name = fmt.replace("{status}",   status)
+        String name = fmt.replace("{status}", status)
                 .replace("{language}", lang.toLowerCase())
-                .replace("{player}",   safeName.substring(0, Math.min(safeName.length(), 10)))
-                .replace("{server}",   safeServer.substring(0, Math.min(safeServer.length(), 10)));
+                .replace("{player}", safeName.substring(0, Math.min(safeName.length(), 10)))
+                .replace("{server}", safeServer.substring(0, Math.min(safeServer.length(), 10)));
         return name.length() > 100 ? name.substring(0, 100) : name;
     }
 
