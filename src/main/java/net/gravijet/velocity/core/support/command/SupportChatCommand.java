@@ -4,6 +4,7 @@ import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import net.gravijet.velocity.core.support.SupportPlugin;
 import net.gravijet.velocity.core.support.manager.SupportManager;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -23,13 +24,13 @@ public class SupportChatCommand implements SimpleCommand {
     @Override
     public void execute(Invocation inv) {
         if (!(inv.source() instanceof Player player)) {
-            inv.source().sendMessage(getMessage("general.players-only"));
+            CompatibilityHelper.sendMessage(inv.source(), getMessage("general.players-only"));
             return;
         }
 
         String[] args = inv.arguments();
         if (args.length == 0) {
-            player.sendMessage(getMessage("support.chat-usage"));
+            CompatibilityHelper.sendMessage(player, getMessage("support.chat-usage"));
             return;
         }
 

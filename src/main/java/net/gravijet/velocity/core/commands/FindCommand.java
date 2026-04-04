@@ -3,6 +3,7 @@ package net.gravijet.velocity.core.commands;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.database.PlayerDataDAO;
 import net.kyori.adventure.text.Component;
@@ -33,11 +34,11 @@ public class FindCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         if (!invocation.source().hasPermission("velocitycore.find")) {
-            invocation.source().sendMessage(getMessage("general.no-permission"));
+            CompatibilityHelper.sendMessage(invocation.source(), getMessage("general.no-permission"));
             return;
         }
         if (invocation.arguments().length == 0) {
-            invocation.source().sendMessage(getMessage("find.usage"));
+            CompatibilityHelper.sendMessage(invocation.source(), getMessage("find.usage"));
             return;
         }
 
@@ -45,7 +46,7 @@ public class FindCommand implements SimpleCommand {
 
         proxy.getPlayer(playerName).ifPresentOrElse(player -> {
             String server = player.getCurrentServer().map(s -> s.getServerInfo().getName()).orElse("unknown");
-            invocation.source().sendMessage(getMessage("find.online",
+            CompatibilityHelper.sendMessage(invocation.source(), getMessage("find.online",
                     Placeholder.unparsed("player", player.getUsername()),
                     Placeholder.unparsed("server", server)
             ));
@@ -53,13 +54,13 @@ public class FindCommand implements SimpleCommand {
             playerDataDAO.getPlayerDataByName(playerName).thenAccept(data -> {
                 if (data != null) {
                     String time = DATE_FORMAT.format(new Date(data.getLastOnline()));
-                    invocation.source().sendMessage(getMessage("find.offline",
+                    CompatibilityHelper.sendMessage(invocation.source(), getMessage("find.offline",
                             Placeholder.unparsed("player", data.getUsername()),
                             Placeholder.unparsed("server", data.getLastServer() != null ? data.getLastServer() : "unknown"),
                             Placeholder.unparsed("time", time)
                     ));
                 } else {
-                    invocation.source().sendMessage(getMessage("general.player-not-found", Placeholder.unparsed("player", playerName)));
+                    CompatibilityHelper.sendMessage(invocation.source(), getMessage("general.player-not-found", Placeholder.unparsed("player", playerName)));
                 }
             });
         });

@@ -4,9 +4,10 @@ import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.managers.JoinMeManager;
 import net.gravijet.velocity.core.managers.TokenManager;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
+import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
@@ -29,16 +30,16 @@ public class JoinMeCommand implements SimpleCommand {
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
         if (!(source instanceof Player player)) {
-            source.sendMessage(getMessage("general.players-only"));
+            CompatibilityHelper.sendMessage(source, getMessage("general.players-only"));
             return;
         }
         if (!player.hasPermission("velocitycore.joinme.use")) {
-            player.sendMessage(getMessage("joinme.no-perm"));
+            CompatibilityHelper.sendMessage(player, getMessage("joinme.no-perm"));
             return;
         }
         long cooldownLeft = joinMeManager.getCooldown(player.getUniqueId());
         if (cooldownLeft > 0 && !player.hasPermission("velocitycore.joinme.cooldown.bypass")) {
-            player.sendMessage(getMessage("joinme.on_cooldown", Placeholder.unparsed("cooldown", String.valueOf(cooldownLeft))));
+            CompatibilityHelper.sendMessage(player, getMessage("joinme.on_cooldown", Placeholder.unparsed("cooldown", String.valueOf(cooldownLeft))));
             return;
         }
         joinMeManager.sendJoinMe(player, false);

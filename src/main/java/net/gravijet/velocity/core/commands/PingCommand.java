@@ -4,6 +4,7 @@ import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -11,7 +12,6 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import org.spongepowered.configurate.ConfigurationNode;
 
 import java.util.List;
-import java.util.Optional;
 
 public class PingCommand implements SimpleCommand {
 
@@ -33,14 +33,14 @@ public class PingCommand implements SimpleCommand {
             if (source instanceof Player player) {
                 sendPing(source, player);
             } else {
-                source.sendMessage(getMessage("ping.console"));
+                CompatibilityHelper.sendMessage(source, getMessage("ping.console"));
             }
             return;
         }
 
         proxy.getPlayer(args[0]).ifPresentOrElse(
                 target -> sendPing(source, target),
-                () -> source.sendMessage(getMessage("general.player-not-found", Placeholder.unparsed("player", args[0])))
+                () -> CompatibilityHelper.sendMessage(source, getMessage("general.player-not-found", Placeholder.unparsed("player", args[0])))
         );
     }
 
@@ -51,7 +51,7 @@ public class PingCommand implements SimpleCommand {
         boolean isSelf = source.equals(target);
         String messageKey = isSelf ? "ping.self" : "ping.other";
 
-        source.sendMessage(getMessage(messageKey,
+        CompatibilityHelper.sendMessage(source, getMessage(messageKey,
                 Placeholder.unparsed("player", target.getUsername()),
                 Placeholder.unparsed("ping", String.valueOf(ping)),
                 Placeholder.unparsed("color", color)

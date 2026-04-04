@@ -3,6 +3,7 @@ package net.gravijet.velocity.core.commands;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.managers.JoinMeManager;
 import net.kyori.adventure.text.Component;
@@ -27,18 +28,18 @@ public class JoinMeColorCommand implements SimpleCommand {
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
         if (!(source instanceof Player player)) {
-            source.sendMessage(getMessage("general.players-only"));
+            CompatibilityHelper.sendMessage(source, getMessage("general.players-only"));
             return;
         }
 
         if (!player.hasPermission("velocitycore.joinme.color")) {
-            player.sendMessage(getMessage("general.no-permission"));
+            CompatibilityHelper.sendMessage(player, getMessage("general.no-permission"));
             return;
         }
 
         String[] args = invocation.arguments();
         if (args.length == 0) {
-            player.sendMessage(getMessage("joinme-color.usage"));
+            CompatibilityHelper.sendMessage(player, getMessage("joinme-color.usage"));
             return;
         }
 
@@ -46,20 +47,20 @@ public class JoinMeColorCommand implements SimpleCommand {
 
         if (rawColor.equalsIgnoreCase("reset")) {
             joinMeManager.setPlayerColor(player.getUniqueId(), null);
-            player.sendMessage(getMessage("joinme-color.reset"));
+            CompatibilityHelper.sendMessage(player, getMessage("joinme-color.reset"));
             return;
         }
 
         // Basic validation for MiniMessage tags
         if (!rawColor.matches("<#[0-9a-fA-F]{6}>") && !rawColor.matches("<[a-zA-Z_]+>")) {
-             player.sendMessage(getMessage("joinme-color.usage"));
+             CompatibilityHelper.sendMessage(player, getMessage("joinme-color.usage"));
              return;
         }
 
         joinMeManager.setPlayerColor(player.getUniqueId(), rawColor);
 
         Component preview = miniMessage.deserialize(rawColor + "preview");
-        player.sendMessage(getMessage("joinme-color.set", Placeholder.component("preview", preview)));
+        CompatibilityHelper.sendMessage(player, getMessage("joinme-color.set", Placeholder.component("preview", preview)));
     }
 
     private Component getMessage(String path, net.kyori.adventure.text.minimessage.tag.resolver.TagResolver... resolvers) {

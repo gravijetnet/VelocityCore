@@ -58,7 +58,7 @@ public class AdvertisingManager {
             }
             String message = messages.get(currentMessageIndex++);
             Component component = miniMessage.deserialize(message);
-            server.getAllPlayers().forEach(player -> player.sendMessage(component));
+            server.getAllPlayers().forEach(player -> CompatibilityHelper.sendMessage(player, component));
         }, 0, interval, TimeUnit.MINUTES);
     }
 

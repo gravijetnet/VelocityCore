@@ -6,6 +6,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.managers.JoinMeManager;
 import net.gravijet.velocity.core.managers.TokenManager;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -160,23 +161,23 @@ public class AdminJoinMeCommand implements SimpleCommand {
         configManager.getMessages().node("admin-joinme", "help").childrenList().stream()
                 .map(ConfigurationNode::getString)
                 .filter(Objects::nonNull)
-                .forEach(line -> source.sendMessage(miniMessage.deserialize(line)));
+                .forEach(line -> CompatibilityHelper.sendMessage(source, miniMessage.deserialize(line)));
     }
 
     private void sendMessage(CommandSource source, String message) {
-        source.sendMessage(miniMessage.deserialize(message));
+        CompatibilityHelper.sendMessage(source, miniMessage.deserialize(message));
     }
     
     private void sendMessage(CommandSource source, Component component) {
-        source.sendMessage(component);
+        CompatibilityHelper.sendMessage(source, component);
     }
 
     private void sendMessage(CommandSource source, String messagePath, TagResolver... resolvers) {
-        source.sendMessage(getMessage(messagePath, resolvers));
+        CompatibilityHelper.sendMessage(source, getMessage(messagePath, resolvers));
     }
 
     private void sendMessage(Player player, String messagePath, TagResolver... resolvers) {
-        player.sendMessage(getMessage(messagePath, resolvers));
+        CompatibilityHelper.sendMessage(player, getMessage(messagePath, resolvers));
     }
     
     private Component getMessage(String path, TagResolver... resolvers) {

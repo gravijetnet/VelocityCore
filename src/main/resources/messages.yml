@@ -106,3 +106,10 @@ support:
     transcript-language-field: "Language"
     transcript-date-field: "Date"
     rating-title: "New Rating"
+
+bug:
+  usage: "<red>Usage: /bug <title> <message></red>"
+  title-too-long: "<red>Title is too long. Maximum 100 characters.</red>"
+  message-too-long: "<red>Message is too long. Maximum 1000 characters.</red>"
+  discord-not-available: "<red>Bug reporting is currently unavailable. Please try again later.</red>"
+  report-sent: "<green>Bug report submitted: <title></green>"

@@ -2,6 +2,7 @@ package net.gravijet.velocity.core.support;
 
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.Main;
+import net.gravijet.velocity.core.support.command.BugCommand;
 import net.gravijet.velocity.core.support.command.SupportChatCommand;
 import net.gravijet.velocity.core.support.command.SupportCommand;
 import net.gravijet.velocity.core.support.discord.DiscordBot;
@@ -47,6 +48,9 @@ public class SupportPlugin {
 
             var spcMeta = server.getCommandManager().metaBuilder("spc").build();
             server.getCommandManager().register(spcMeta, new SupportChatCommand(this));
+
+            var bugMeta = server.getCommandManager().metaBuilder("bug").build();
+            server.getCommandManager().register(bugMeta, new BugCommand(this));
 
             // Only start Discord bot if enabled in config
             if (configManager.getConfig().node("support", "discord", "enabled").getBoolean(false)) {

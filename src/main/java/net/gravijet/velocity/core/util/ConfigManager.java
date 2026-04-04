@@ -3,6 +3,8 @@ package net.gravijet.velocity.core.util;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.Main;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.spongepowered.configurate.CommentedConfigurationNode;
 import org.spongepowered.configurate.ConfigurateException;
 import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
@@ -11,7 +13,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Objects;
 
 public class ConfigManager {
 
@@ -50,7 +51,7 @@ public class ConfigManager {
                 Files.createDirectories(filePath.getParent());
                 Files.copy(in, filePath);
             } catch (IOException e) {
-                server.getConsoleCommandSource().sendMessage(net.kyori.adventure.text.Component.text("Could not create " + fileName + ": " + e.getMessage(), net.kyori.adventure.text.format.NamedTextColor.RED));
+                CompatibilityHelper.sendMessage(server.getConsoleCommandSource(), Component.text("Could not create " + fileName + ": " + e.getMessage(), NamedTextColor.RED));
             }
         }
 
@@ -60,7 +61,7 @@ public class ConfigManager {
         try {
             return loader.load();
         } catch (ConfigurateException e) {
-            server.getConsoleCommandSource().sendMessage(net.kyori.adventure.text.Component.text("Error loading " + fileName + ": " + e.getMessage(), net.kyori.adventure.text.format.NamedTextColor.RED));
+            CompatibilityHelper.sendMessage(server.getConsoleCommandSource(), Component.text("Error loading " + fileName + ": " + e.getMessage(), NamedTextColor.RED));
             return null;
         }
     }

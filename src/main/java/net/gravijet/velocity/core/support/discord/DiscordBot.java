@@ -438,6 +438,46 @@ public class DiscordBot {
         }
     }
 
+        public void sendBugReport(String playerName, String serverName, String title, String message) {
+        if (client == null) {
+            plugin.getLogger().warn("Discord bot not connected, cannot send bug report.");
+            return;
+        }
+
+        try {
+            // Bug report channel ID (form channel)
+            String bugChannelId = "000000000000000000";
+            TextChannel channel = (TextChannel) client.getChannelById(Snowflake.of(bugChannelId)).block();
+            if (channel == null) {
+                plugin.getLogger().error("Bug report channel not found: {}", bugChannelId);
+                return;
+            }
+
+            EmbedCreateSpec embed = EmbedCreateSpec.builder()
+                    .color(Color.of(0xFFA500)) // Orange color for bug reports
+                    .title("Bug Report: " + title)
+                    .addField("Reported by", playerName, true)
+                    .addField("Server", serverName, true)
+                    .addField("Time", DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
+                            .format(LocalDateTime.now(ZoneId.systemDefault())), true)
+                    .addField("Description", message, false)
+                    .timestamp(Instant.now())
+                    .footer("Bug Report", null)
+                    .build();
+
+            // Create message with tag
+            String tagId = "000000000000000000";
+            channel.createMessage(MessageCreateSpec.builder()
+                    .content("<@&" + tagId + ">")
+                    .addEmbed(embed)
+                    .build()).subscribe();
+
+            plugin.getLogger().info("Bug report sent from {} on {}: {}", playerName, serverName, title);
+        } catch (Exception e) {
+            plugin.getLogger().error("Failed to send bug report.", e);
+        }
+    }
+
     public String getSessionIdByDiscordStaff(String discordId) {
         return discordStaffSession.get(discordId);
     }

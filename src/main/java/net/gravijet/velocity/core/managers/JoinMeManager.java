@@ -6,6 +6,7 @@ import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.gravijet.velocity.core.Main;
 import net.gravijet.velocity.core.database.models.PlayerData;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.sound.Sound;
@@ -42,7 +43,7 @@ public class JoinMeManager {
     public CompletableFuture<Boolean> sendJoinMe(Player player, boolean isAdmin) {
         long cooldownSeconds = getCooldown(player.getUniqueId());
         if (!isAdmin && !player.hasPermission("velocitycore.joinme.cooldown.bypass") && cooldownSeconds > 0) {
-            player.sendMessage(getMessage("joinme.on_cooldown", Placeholder.unparsed("cooldown", String.valueOf(cooldownSeconds))));
+            CompatibilityHelper.sendMessage(player, getMessage("joinme.on_cooldown", Placeholder.unparsed("cooldown", String.valueOf(cooldownSeconds))));
             return CompletableFuture.completedFuture(false);
         }
 
@@ -57,7 +58,7 @@ public class JoinMeManager {
                 return CompletableFuture.completedFuture(true);
             }
             if (data == null || data.getTotalTokens() <= 0) {
-                player.sendMessage(getMessage("joinme.no_tokens"));
+                CompatibilityHelper.sendMessage(player, getMessage("joinme.no_tokens"));
                 return CompletableFuture.completedFuture(false);
             }
             return tokenManager.useToken(player.getUniqueId()).thenApply(success -> {
@@ -70,7 +71,7 @@ public class JoinMeManager {
                     return true;
                 }
                 // Assuming a generic error message if token use fails
-                player.sendMessage(miniMessage.deserialize("<red>Could not use your token. Please try again.</red>"));
+                CompatibilityHelper.sendMessage(player, miniMessage.deserialize("<red>Could not use your token. Please try again.</red>"));
                 return false;
             });
         });
@@ -83,7 +84,7 @@ public class JoinMeManager {
         String serverName = server.getServerInfo().getName();
         Component message = buildBroadcast(player, serverName, isAdmin);
         proxy.getAllPlayers().forEach(p -> {
-            p.sendMessage(message);
+            CompatibilityHelper.sendMessage(p, message);
             p.playSound(PING_SOUND);
         });
     }

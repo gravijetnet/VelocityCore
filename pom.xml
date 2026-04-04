@@ -16,10 +16,10 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <velocity.version>3.3.0-SNAPSHOT</velocity.version>
+        <velocity.version>3.5.0-SNAPSHOT</velocity.version>
         <discord4j.version>3.2.6</discord4j.version>
-        <configurate.version>4.2.0</configurate.version>
-        <adventure.version>4.17.0</adventure.version>
+        <configurate.version>4.1.2</configurate.version>
+        <adventure.version>4.14.0</adventure.version>
     </properties>
 
     <repositories>
@@ -92,16 +92,16 @@
             <artifactId>configurate-yaml</artifactId>
             <version>${configurate.version}</version>
         </dependency>
-        <!-- Adventure for MiniMessage -->
+        <!-- Adventure included and relocated -->
         <dependency>
             <groupId>net.kyori</groupId>
             <artifactId>adventure-api</artifactId>
-            <version>${adventure.version}</version>
+            <version>4.26.1</version>
         </dependency>
         <dependency>
             <groupId>net.kyori</groupId>
             <artifactId>adventure-text-minimessage</artifactId>
-            <version>${adventure.version}</version>
+            <version>4.26.1</version>
         </dependency>
 
     </dependencies>
@@ -154,6 +154,7 @@
                                 <pattern>net.kyori.adventure</pattern>
                                 <shadedPattern>net.gravijet.support.libs.adventure</shadedPattern>
                             </relocation>
+
                         </relocations>
                         <filters>
                             <filter>

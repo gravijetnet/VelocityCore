@@ -4,10 +4,10 @@ import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import net.gravijet.velocity.core.support.SupportPlugin;
 import net.gravijet.velocity.core.support.manager.SupportManager;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.spongepowered.configurate.ConfigurationNode;
 
@@ -30,7 +30,7 @@ public class SupportCommand implements SimpleCommand {
     @Override
     public void execute(Invocation inv) {
         if (!(inv.source() instanceof Player player)) {
-            inv.source().sendMessage(getMessage("general.players-only"));
+            CompatibilityHelper.sendMessage(inv.source(), getMessage("general.players-only"));
             return;
         }
 
@@ -70,9 +70,9 @@ public class SupportCommand implements SimpleCommand {
                 }
                 try {
                     // manager.rateSupport(player, Integer.parseInt(args[1])); // This method needs to be refactored in SupportManager
-                    player.sendMessage(Component.text("Rating is temporarily disabled."));
+                    CompatibilityHelper.sendMessage(player, Component.text("Rating is temporarily disabled."));
                 } catch (NumberFormatException e) {
-                    player.sendMessage(getMessage("support.invalid-rating"));
+                    CompatibilityHelper.sendMessage(player, getMessage("support.invalid-rating"));
                 }
             }
 
@@ -80,7 +80,7 @@ public class SupportCommand implements SimpleCommand {
                     "/support claim <player> [--force]", "Claim a support request.", () -> {
                         boolean force = args.length > 2 && "--force".equalsIgnoreCase(args[2]);
                         if (force && !perm(player, "support.force")) {
-                            player.sendMessage(getMessage("general.no-permission"));
+                            CompatibilityHelper.sendMessage(player, getMessage("general.no-permission"));
                             return;
                         }
                         manager.claimSupport(player, args[1], force);
@@ -90,10 +90,10 @@ public class SupportCommand implements SimpleCommand {
                     "/support close", "Close the current session.",
                     () -> {
                         // manager.closeSupportSession(player); // This method needs to be refactored in SupportManager
-                        player.sendMessage(Component.text("Closing is temporarily disabled."));
+                        CompatibilityHelper.sendMessage(player, Component.text("Closing is temporarily disabled."));
                     });
 
-            default -> player.sendMessage(getMessage("support.invalid-command"));
+            default -> CompatibilityHelper.sendMessage(player, getMessage("support.invalid-command"));
         }
     }
 
@@ -104,7 +104,7 @@ public class SupportCommand implements SimpleCommand {
             return;
         }
         if (!perm(player, permission)) {
-            player.sendMessage(getMessage("general.no-permission"));
+            CompatibilityHelper.sendMessage(player, getMessage("general.no-permission"));
             return;
         }
         if (args.length < minArgs) {
@@ -119,7 +119,7 @@ public class SupportCommand implements SimpleCommand {
     }
 
     private void sendHelp(Player player, String cmd, String desc) {
-        player.sendMessage(miniMessage.deserialize("<#ff0000>● <red>" + cmd + " <dark_gray>» <white>" + desc));
+        CompatibilityHelper.sendMessage(player, miniMessage.deserialize("<#ff0000>● <red>" + cmd + " <dark_gray>» <white>" + desc));
     }
 
     private boolean perm(Player p, String permission) {
@@ -133,7 +133,7 @@ public class SupportCommand implements SimpleCommand {
         if (helpNode.isList()) {
             helpNode.childrenList().stream()
                     .map(ConfigurationNode::getString)
-                    .forEach(line -> player.sendMessage(miniMessage.deserialize(line)));
+                    .forEach(line -> CompatibilityHelper.sendMessage(player, miniMessage.deserialize(line)));
         }
     }
     

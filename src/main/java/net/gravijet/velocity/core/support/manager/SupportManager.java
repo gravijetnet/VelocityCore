@@ -8,6 +8,7 @@ import net.gravijet.velocity.core.support.model.BanEntry;
 import net.gravijet.velocity.core.support.model.RatedSession;
 import net.gravijet.velocity.core.support.model.SupportSession;
 import net.gravijet.velocity.core.support.util.DurationUtil;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
@@ -15,7 +16,6 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
-import org.spongepowered.configurate.ConfigurationNode;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,7 +24,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -104,7 +103,7 @@ public class SupportManager {
 
         Optional<Player> staffOpt = session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer);
         staffOpt.ifPresent(staff -> {
-            staff.sendMessage(getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
             staffToSession.remove(staff.getUniqueId());
         });
 
@@ -113,7 +112,7 @@ public class SupportManager {
         Optional<Player> playerOpt = plugin.getServer().getPlayer(session.getPlayerId());
         playerToSession.remove(session.getPlayerId());
         if (playerOpt.isPresent()) {
-            playerOpt.get().sendMessage(getMessage("support.ticket-auto-closed"));
+            CompatibilityHelper.sendMessage(playerOpt.get(), getMessage("support.ticket-auto-closed"));
             sendRatingPrompt(playerOpt.get(), session);
         } else {
             pendingNotifications.put(session.getPlayerId(), new ClosedSessionNotification(sessionId, Instant.now(), session.getLanguage()));
@@ -139,16 +138,16 @@ public class SupportManager {
 
     public boolean canRequestSupport(Player player, String lang) {
         if (hasPermission(player, getStaffPermission())) {
-            player.sendMessage(getMessage("support.staff-cannot-request"));
+            CompatibilityHelper.sendMessage(player, Component.text("Staff cannot request support"));
             return false;
         }
         String banMsg = getBanMessage(player.getUniqueId(), lang);
         if (banMsg != null) {
-            player.sendMessage(miniMessage.deserialize(banMsg));
+            CompatibilityHelper.sendMessage(player, Component.text(banMsg));
             return false;
         }
         if (playerToSession.containsKey(player.getUniqueId())) {
-            player.sendMessage(getMessage("support.already-in-session"));
+            CompatibilityHelper.sendMessage(player, Component.text("You already have an active support session"));
             return false;
         }
         return true;
@@ -175,42 +174,42 @@ public class SupportManager {
 
         plugin.getServer().getAllPlayers().stream()
                 .filter(p -> hasPermission(p, getStaffPermission()))
-                .forEach(p -> p.sendMessage(component));
+                .forEach(p -> CompatibilityHelper.sendMessage(p, component));
 
-        player.sendMessage(getMessage("support.ticket-created"));
+        CompatibilityHelper.sendMessage(player, getMessage("support.ticket-created"));
         logSessionAction(session, "CREATED", "Player requested support (" + language.toUpperCase() + ")");
     }
 
     public boolean claimSupport(Player staff, String playerName, boolean force) {
         Optional<Player> targetOpt = plugin.getServer().getPlayer(playerName);
         if (targetOpt.isEmpty()) {
-            staff.sendMessage(getMessage("general.player-not-found", Placeholder.unparsed("player", playerName)));
+            CompatibilityHelper.sendMessage(staff, getMessage("general.player-not-found", Placeholder.unparsed("player", playerName)));
             return false;
         }
 
         Player target = targetOpt.get();
         UUID sessionId = playerToSession.get(target.getUniqueId());
         if (sessionId == null) {
-            staff.sendMessage(getMessage("support.no-active-session-for-player", Placeholder.unparsed("player", playerName)));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.no-active-session-for-player", Placeholder.unparsed("player", playerName)));
             return false;
         }
 
         SupportSession session = activeSessions.get(sessionId);
         if (session == null) {
-            staff.sendMessage(getMessage("support.no-active-session-for-player", Placeholder.unparsed("player", playerName)));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.no-active-session-for-player", Placeholder.unparsed("player", playerName)));
             return false;
         }
 
         UUID existingStaffSession = staffToSession.get(staff.getUniqueId());
         if (existingStaffSession != null && !existingStaffSession.equals(sessionId)) {
-            staff.sendMessage(getMessage("support.already-handling-session"));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.already-handling-session"));
             return false;
         }
 
         boolean alreadyClaimed = session.getStaffId() != null || discordStaffToSession.containsValue(sessionId);
         if (alreadyClaimed && !force) {
             String existingStaff = session.getStaffName() != null ? session.getStaffName() : "a Discord team member";
-            staff.sendMessage(getMessage("support.already-claimed", Placeholder.unparsed("staff", existingStaff)));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.already-claimed", Placeholder.unparsed("staff", existingStaff)));
             return false;
         }
 
@@ -223,8 +222,8 @@ public class SupportManager {
         session.setDiscordOnly(false);
         staffToSession.put(staff.getUniqueId(), sessionId);
 
-        staff.sendMessage(getMessage("support.claimed-by-you", Placeholder.unparsed("player", target.getUsername())));
-        target.sendMessage(getMessage("support.claimed-by-staff", Placeholder.unparsed("staff", staff.getUsername())));
+        CompatibilityHelper.sendMessage(staff, getMessage("support.claimed-by-you", Placeholder.unparsed("player", target.getUsername())));
+        CompatibilityHelper.sendMessage(target, getMessage("support.claimed-by-staff", Placeholder.unparsed("staff", staff.getUsername())));
 
         if (plugin.getDiscordBot() != null) {
             plugin.getDiscordBot().updateChannelToClaimed(session.getSessionId().toString(), staff.getUsername(), staff.getUniqueId().toString());
@@ -255,7 +254,7 @@ public class SupportManager {
         discordStaffToSession.put(discordStaffId, sessionId);
         sessionLastActivity.put(sessionId, Instant.now());
 
-        targetOpt.get().sendMessage(getMessage("support.claimed-by-staff", Placeholder.unparsed("staff", staffName)));
+        CompatibilityHelper.sendMessage(targetOpt.get(), getMessage("support.claimed-by-staff", Placeholder.unparsed("staff", staffName)));
         logSessionAction(session, "CLAIMED_DISCORD", "Claimed by Discord user " + staffName);
         return true;
     }
@@ -265,17 +264,17 @@ public class SupportManager {
         UUID sessionId = isStaff ? staffToSession.get(closer.getUniqueId()) : playerToSession.get(closer.getUniqueId());
 
         if (sessionId == null) {
-            closer.sendMessage(getMessage("support.no-open-ticket"));
+            CompatibilityHelper.sendMessage(closer, getMessage("support.no-open-ticket"));
             return;
         }
         SupportSession session = activeSessions.get(sessionId);
         if (session == null) {
-            closer.sendMessage(getMessage("support.no-open-ticket"));
+            CompatibilityHelper.sendMessage(closer, getMessage("support.no-open-ticket"));
             return;
         }
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-            staff.sendMessage(getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
             staffToSession.remove(staff.getUniqueId());
         });
 
@@ -284,7 +283,7 @@ public class SupportManager {
 
         Optional<Player> playerOpt = plugin.getServer().getPlayer(session.getPlayerId());
         if (playerOpt.isPresent()) {
-            playerOpt.get().sendMessage(getMessage("support.ticket-closed"));
+            CompatibilityHelper.sendMessage(playerOpt.get(), getMessage("support.ticket-closed"));
             sendRatingPrompt(playerOpt.get(), session);
         } else {
             pendingNotifications.put(session.getPlayerId(), new ClosedSessionNotification(sessionId, Instant.now(), session.getLanguage()));
@@ -306,7 +305,7 @@ public class SupportManager {
         if (session == null) return false;
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-            staff.sendMessage(getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
             staffToSession.remove(staff.getUniqueId());
         });
 
@@ -315,7 +314,7 @@ public class SupportManager {
 
         Optional<Player> playerOpt = plugin.getServer().getPlayer(session.getPlayerId());
         if (playerOpt.isPresent()) {
-            playerOpt.get().sendMessage(getMessage("support.ticket-closed"));
+            CompatibilityHelper.sendMessage(playerOpt.get(), getMessage("support.ticket-closed"));
             sendRatingPrompt(playerOpt.get(), session);
         } else {
             pendingNotifications.put(session.getPlayerId(), new ClosedSessionNotification(sessionId, Instant.now(), session.getLanguage()));
@@ -335,12 +334,12 @@ public class SupportManager {
         UUID sessionId = isStaff ? staffToSession.get(sender.getUniqueId()) : playerToSession.get(sender.getUniqueId());
 
         if (sessionId == null) {
-            sender.sendMessage(getMessage("support.no-open-ticket"));
+            CompatibilityHelper.sendMessage(sender, getMessage("support.no-open-ticket"));
             return;
         }
         SupportSession session = activeSessions.get(sessionId);
         if (session == null) {
-            sender.sendMessage(getMessage("support.no-open-ticket"));
+            CompatibilityHelper.sendMessage(sender, getMessage("support.no-open-ticket"));
             return;
         }
 
@@ -354,13 +353,13 @@ public class SupportManager {
         );
 
         if (isStaff) {
-            playerOpt.ifPresent(p -> p.sendMessage(chatMessage));
+            playerOpt.ifPresent(p -> CompatibilityHelper.sendMessage(p, chatMessage));
             staffOpt.filter(s -> !s.getUniqueId().equals(sender.getUniqueId()))
-                    .ifPresent(s -> s.sendMessage(chatMessage));
-            sender.sendMessage(chatMessage);
+                    .ifPresent(s -> CompatibilityHelper.sendMessage(s, chatMessage));
+            CompatibilityHelper.sendMessage(sender, chatMessage);
         } else {
-            staffOpt.ifPresent(s -> s.sendMessage(chatMessage));
-            sender.sendMessage(chatMessage);
+            staffOpt.ifPresent(s -> CompatibilityHelper.sendMessage(s, chatMessage));
+            CompatibilityHelper.sendMessage(sender, chatMessage);
         }
 
         logSessionChat(session, sender.getUsername(), message);
@@ -383,16 +382,16 @@ public class SupportManager {
         );
 
         plugin.getServer().getPlayer(session.getPlayerId())
-                .ifPresent(p -> p.sendMessage(chatMessage));
+                .ifPresent(p -> CompatibilityHelper.sendMessage(p, chatMessage));
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer)
-                .ifPresent(s -> s.sendMessage(chatMessage));
+                .ifPresent(s -> CompatibilityHelper.sendMessage(s, chatMessage));
 
         logSessionChat(session, "Discord/" + discordStaffId, message);
     }
 
     private void sendRatingPrompt(Player player, SupportSession session) {
-        player.sendMessage(getMessage("support.rating-prompt"));
+        CompatibilityHelper.sendMessage(player, getMessage("support.rating-prompt"));
         Component row = Component.empty();
         for (int i = 1; i <= 5; i++) {
             Component btn = Component.text("[" + i + "]")
@@ -401,12 +400,12 @@ public class SupportManager {
                     .clickEvent(ClickEvent.runCommand("/support rate " + i));
             row = row.append(btn).append(Component.text(" "));
         }
-        player.sendMessage(row);
+        CompatibilityHelper.sendMessage(player, row);
     }
 
     public void rateSupport(Player player, int rating) {
         if (rating < 1 || rating > 5) {
-            player.sendMessage(getMessage("support.invalid-rating"));
+            CompatibilityHelper.sendMessage(player, getMessage("support.invalid-rating"));
             return;
         }
 
@@ -414,25 +413,25 @@ public class SupportManager {
         SupportSession session = lastSessionId != null ? closedSessions.get(lastSessionId) : null;
 
         if (session == null) {
-            player.sendMessage(getMessage("support.not-session-player"));
+            CompatibilityHelper.sendMessage(player, getMessage("support.not-session-player"));
             return;
         }
 
         if (ratedSessions.containsKey(session.getSessionId())) {
-            player.sendMessage(getMessage("support.already-rated"));
+            CompatibilityHelper.sendMessage(player, getMessage("support.already-rated"));
             return;
         }
         if (session.getClosedAt() != null && session.getClosedAt().plusSeconds(3600).isBefore(Instant.now())) {
-            player.sendMessage(getMessage("support.rating-expired"));
+            CompatibilityHelper.sendMessage(player, getMessage("support.rating-expired"));
             return;
         }
 
         String staffName = session.getStaffName() != null ? session.getStaffName() : "Unknown";
         ratedSessions.put(session.getSessionId(), new RatedSession(session.getSessionId(), rating, Instant.now(), staffName));
-        player.sendMessage(getMessage("support.rating-received", Placeholder.unparsed("rating", String.valueOf(rating))));
+        CompatibilityHelper.sendMessage(player, getMessage("support.rating-received", Placeholder.unparsed("rating", String.valueOf(rating))));
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff ->
-                staff.sendMessage(miniMessage.deserialize("<gray>" + player.getUsername() + " rated this session " + rating + "/5.</gray>")));
+                CompatibilityHelper.sendMessage(staff, miniMessage.deserialize("<gray>" + player.getUsername() + " rated this session " + rating + "/5.</gray>")));
 
         if (plugin.getDiscordBot() != null) {
             plugin.getDiscordBot().sendRatingEmbedToChannel(session.getSessionId().toString(), rating, player.getUsername(), staffName);
@@ -444,7 +443,7 @@ public class SupportManager {
     public void handlePlayerJoin(Player player) {
         ClosedSessionNotification note = pendingNotifications.remove(player.getUniqueId());
         if (note != null && note.closedAt().plusSeconds(3600).isAfter(Instant.now())) {
-            player.sendMessage(getMessage("support.ticket-auto-closed"));
+            CompatibilityHelper.sendMessage(player, getMessage("support.ticket-auto-closed"));
             SupportSession dummy = new SupportSession(player.getUniqueId(), player.getUsername(), note.language(), Instant.now());
             sendRatingPrompt(player, dummy);
         }
@@ -454,7 +453,7 @@ public class SupportManager {
             SupportSession session = activeSessions.get(sessionId);
             if (session != null) {
                 session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-                    staff.sendMessage(getMessage("support.player-online-status", Placeholder.unparsed("player", player.getUsername())));
+                    CompatibilityHelper.sendMessage(staff, getMessage("support.player-online-status", Placeholder.unparsed("player", player.getUsername())));
                     if (plugin.getDiscordBot() != null) {
                         plugin.getDiscordBot().sendStatusMessageToChannel(sessionId.toString(), player.getUsername() + " is online");
                     }
@@ -469,7 +468,7 @@ public class SupportManager {
             SupportSession session = activeSessions.get(sessionId);
             if (session != null) {
                 session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-                    staff.sendMessage(getMessage("support.player-offline-status", Placeholder.unparsed("player", player.getUsername())));
+                    CompatibilityHelper.sendMessage(staff, getMessage("support.player-offline-status", Placeholder.unparsed("player", player.getUsername())));
                     if (plugin.getDiscordBot() != null) {
                         plugin.getDiscordBot().sendStatusMessageToChannel(sessionId.toString(), player.getUsername() + " went offline");
                     }

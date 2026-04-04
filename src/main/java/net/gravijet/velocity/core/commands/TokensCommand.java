@@ -5,13 +5,13 @@ import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.managers.JoinMeManager;
-import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.managers.TokenManager;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
+import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
-import org.spongepowered.configurate.ConfigurationNode;
 
 import java.util.concurrent.TimeUnit;
 
@@ -32,17 +32,17 @@ public class TokensCommand implements SimpleCommand {
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
         if (!(source instanceof Player player)) {
-            source.sendMessage(getMessage("general.players-only"));
+            CompatibilityHelper.sendMessage(source, getMessage("general.players-only"));
             return;
         }
         if (!player.hasPermission("velocitycore.tokens.view")) {
-            player.sendMessage(getMessage("general.no-permission"));
+            CompatibilityHelper.sendMessage(player, getMessage("general.no-permission"));
             return;
         }
 
         tokenManager.getPlayerData(player.getUniqueId()).thenAccept(data -> {
             if (data == null) {
-                player.sendMessage(getMessage("tokens.error"));
+                CompatibilityHelper.sendMessage(player, getMessage("tokens.error"));
                 return;
             }
 
@@ -71,7 +71,7 @@ public class TokensCommand implements SimpleCommand {
                 cooldown = getMessage("tokens.cooldown.ready").toString();
             }
 
-            player.sendMessage(getMessage("tokens.info",
+            CompatibilityHelper.sendMessage(player, getMessage("tokens.info",
                     Placeholder.unparsed("status", status),
                     Placeholder.unparsed("total", total),
                     Placeholder.unparsed("monthly", monthly),
@@ -81,7 +81,7 @@ public class TokensCommand implements SimpleCommand {
 
             String storeLink = configManager.getMessages().node("tokens", "store-link").getString();
             if (storeLink != null && !storeLink.isEmpty()) {
-                player.sendMessage(miniMessage.deserialize(storeLink));
+                CompatibilityHelper.sendMessage(player, miniMessage.deserialize(storeLink));
             }
         });
     }
