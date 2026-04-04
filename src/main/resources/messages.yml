@@ -113,3 +113,8 @@ bug:
   message-too-long: "<red>Message is too long. Maximum 1000 characters.</red>"
   discord-not-available: "<red>Bug reporting is currently unavailable. Please try again later.</red>"
   report-sent: "<green>Bug report submitted: <title></green>"
+  embed-title: "New Bug Report"
+  embed-footer: "Reported by {player}"
+  embed-field-title: "Title"
+  embed-field-message: "Message"
+  embed-field-server: "Server"
