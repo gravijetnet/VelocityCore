@@ -14,6 +14,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import java.util.Map;
 import java.util.UUID;
@@ -90,17 +91,18 @@ public class JoinMeManager {
     }
 
     private Component buildBroadcast(Player player, String serverName, boolean isAdmin) {
-        String accent = isAdmin ? "<green>" : getPlayerColorPreference(player.getUniqueId());
-        if (accent == null || accent.isEmpty()) {
-            accent = "<red>"; // Default color
-        }
-
         String template = configManager.getMessages().node("joinme", "broadcast").getString("");
-        return miniMessage.deserialize(template,
-                Placeholder.unparsed("player", player.getUsername()),
-                Placeholder.component("click", Component.text("Click to join!").clickEvent(ClickEvent.runCommand("/server " + serverName)))
-        );
+
+        // Create a resolver for the player's name
+        TagResolver playerResolver = Placeholder.unparsed("player", player.getUsername());
+
+        // Deserialize the message using the resolver
+        Component parsedMessage = miniMessage.deserialize(template, playerResolver);
+
+        // Add the click event to the entire component
+        return parsedMessage.clickEvent(ClickEvent.runCommand("/server " + serverName));
     }
+
 
     public void forceJoinMe(Player player) {
         sendJoinMe(player, true);
