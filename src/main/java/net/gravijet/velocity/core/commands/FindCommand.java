@@ -6,10 +6,6 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.database.PlayerDataDAO;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
-import org.spongepowered.configurate.ConfigurationNode;
 
 import java.text.SimpleDateFormat;
 import java.util.Collections;
@@ -23,7 +19,6 @@ public class FindCommand implements SimpleCommand {
     private final ProxyServer proxy;
     private final PlayerDataDAO playerDataDAO;
     private final ConfigManager configManager;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public FindCommand(ProxyServer proxy, PlayerDataDAO playerDataDAO, ConfigManager configManager) {
         this.proxy = proxy;
@@ -34,46 +29,41 @@ public class FindCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         if (!invocation.source().hasPermission("velocitycore.find")) {
-            CompatibilityHelper.sendMessage(invocation.source(), getMessage("general.no-permission"));
+            CompatibilityHelper.sendMessage(invocation.source(),
+                    CompatibilityHelper.colorize(msg("general.no-permission")));
             return;
         }
         if (invocation.arguments().length == 0) {
-            CompatibilityHelper.sendMessage(invocation.source(), getMessage("find.usage"));
+            CompatibilityHelper.sendMessage(invocation.source(),
+                    CompatibilityHelper.colorize(msg("find.usage")));
             return;
         }
 
         String playerName = invocation.arguments()[0];
 
         proxy.getPlayer(playerName).ifPresentOrElse(player -> {
-            String server = player.getCurrentServer().map(s -> s.getServerInfo().getName()).orElse("unknown");
-            CompatibilityHelper.sendMessage(invocation.source(), getMessage("find.online",
-                    Placeholder.unparsed("player", player.getUsername()),
-                    Placeholder.unparsed("server", server)
-            ));
-        }, () -> {
-            playerDataDAO.getPlayerDataByName(playerName).thenAccept(data -> {
-                if (data != null) {
-                    String time = DATE_FORMAT.format(new Date(data.getLastOnline()));
-                    CompatibilityHelper.sendMessage(invocation.source(), getMessage("find.offline",
-                            Placeholder.unparsed("player", data.getUsername()),
-                            Placeholder.unparsed("server", data.getLastServer() != null ? data.getLastServer() : "unknown"),
-                            Placeholder.unparsed("time", time)
-                    ));
-                } else {
-                    CompatibilityHelper.sendMessage(invocation.source(), getMessage("general.player-not-found", Placeholder.unparsed("player", playerName)));
-                }
-            });
-        });
+            String server = player.getCurrentServer()
+                    .map(s -> s.getServerInfo().getName()).orElse("unknown");
+            CompatibilityHelper.sendMessage(invocation.source(), CompatibilityHelper.colorize(
+                    msg("find.online"), "player", player.getUsername(), "server", server));
+        }, () -> playerDataDAO.getPlayerDataByName(playerName).thenAccept(data -> {
+            if (data != null) {
+                String time = DATE_FORMAT.format(new Date(data.getLastOnline()));
+                CompatibilityHelper.sendMessage(invocation.source(), CompatibilityHelper.colorize(
+                        msg("find.offline"),
+                        "player", data.getUsername(),
+                        "server", data.getLastServer() != null ? data.getLastServer() : "unknown",
+                        "time", time));
+            } else {
+                CompatibilityHelper.sendMessage(invocation.source(), CompatibilityHelper.colorize(
+                        msg("general.player-not-found"), "player", playerName));
+            }
+        }));
     }
 
-    private Component getMessage(String path, net.kyori.adventure.text.minimessage.tag.resolver.TagResolver... resolvers) {
-        String template = getMessageNode(path).getString("");
-        return miniMessage.deserialize(template, resolvers);
-    }
-
-    private ConfigurationNode getMessageNode(String path) {
-        Object[] parts = path.split("\\.");
-        return configManager.getMessages().node(parts);
+    private String msg(String path) {
+        String val = configManager.getMessages().node((Object[]) path.split("\\.")).getString("");
+        return val != null ? val : "";
     }
 
     @Override
@@ -82,7 +72,8 @@ public class FindCommand implements SimpleCommand {
         if (invocation.arguments().length <= 1) {
             return proxy.getAllPlayers().stream()
                     .map(Player::getUsername)
-                    .filter(name -> invocation.arguments().length == 0 || name.toLowerCase().startsWith(invocation.arguments()[0].toLowerCase()))
+                    .filter(name -> invocation.arguments().length == 0
+                            || name.toLowerCase().startsWith(invocation.arguments()[0].toLowerCase()))
                     .toList();
         }
         return Collections.emptyList();

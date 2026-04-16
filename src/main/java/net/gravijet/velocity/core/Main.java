@@ -83,6 +83,7 @@ public class Main {
             cmd.register(cmd.metaBuilder("ping").aliases("velocityping").build(), new PingCommand(proxy, configManager));
             cmd.register(cmd.metaBuilder("joinmecolor").aliases("jmc").build(), new JoinMeColorCommand(joinMeManager, configManager));
             cmd.register(cmd.metaBuilder("find").build(), new FindCommand(proxy, playerDataDAO, configManager));
+            cmd.register(cmd.metaBuilder("hoster").build(), new HosterCommand(configManager));
 
 
             // Initialize Support Plugin

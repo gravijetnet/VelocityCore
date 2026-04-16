@@ -1,99 +1,132 @@
 # Messages for VelocityCore
-# Uses MiniMessage format: https://docs.adventure.kyori.net/minimessage/format.html
+# Uses legacy & color codes (&c = red, &f = white, &a = green, &e = yellow, etc.)
+# Placeholders use {key} syntax.
 
-prefix: "<#ff0000>&lGraviJet <dark_gray>» <white>"
+prefix: "&cGraviJet &8\u00bb &f"
 
 general:
-  no-permission: "<red>You do not have permission to use this command.</red>"
-  players-only: "<red>This command can only be used by players.</red>"
-  player-not-found: "<red>Player <white><player></white> not found.</red>"
-  invalid-amount: "<red>Invalid amount specified.</red>"
+  no-permission: "&cYou don't have permission to use this command."
+  players-only: "&cThis command can only be used by players."
+  player-not-found: "&cPlayer &f{player} &cwas not found."
+  invalid-amount: "&cInvalid amount specified."
 
 reload:
-  success: "<green>Configuration reloaded successfully.</green>"
-  failure: "<red>Failed to reload configuration.</red>"
+  success: "&aConfiguration reloaded successfully."
+  failure: "&cFailed to reload configuration."
+
+ping:
+  console: "&cThis command can only be used by players."
+  self: "&cGraviJet &8\u00bb &fYour ping: {color}{ping}ms"
+  other: "&cGraviJet &8\u00bb &fPing of &c{player}&f: {color}{ping}ms"
+
+find:
+  usage: "&cUsage: &f/find <player>"
+  online: "&cGraviJet &8\u00bb &f{player} &fis currently on &c{server}&f."
+  offline: "&cGraviJet &8\u00bb &f{player} &fwas last seen on &c{server} &fat &c{time}&f."
+
+hoster:
+  message: "&cexample.invalid &fis powered by &cIndex-Hosting.com&f.\n &7Get 10% off with code &5GRAVI&f."
 
 joinme:
-  no-perm: "<red>You do not have permission to use JoinMe.</red>"
+  no-perm: "&cYou don't have permission to use JoinMe."
   status_format: |-
-    <prefix><bold>JoinMe Tokens</bold>
-    <red>Status<dark_gray>:    <white>{status}
-    <red>Total<dark_gray>:     <white>{total}
-    <red>Monthly<dark_gray>:   <white>{monthly} <dark_gray>(<gray>resets monthly</gray>)
-    <red>Permanent<dark_gray>: <white>{permanent} <dark_gray>(<gray>never expires</gray>)
-    <red>Cooldown<dark_gray>:  <white>{cooldown}"
-  on_cooldown: "<red>You are on cooldown for another {cooldown} seconds.</red>"
-  no_tokens: "<red>You do not have enough JoinMe tokens.</red>"
-  broadcast: "<aqua>{player} has activated a JoinMe! Click here to join their server!</aqua>"
+    &cGraviJet &8\u00bb &f&lJoinMe Tokens
+    &cStatus&8:     &f{status}
+    &cTotal&8:      &f{total}
+    &cMonthly&8:    &f{monthly} &7(resets monthly)
+    &cPermanent&8:  &f{permanent} &7(never expires)
+    &cCooldown&8:   &f{cooldown}
+  on_cooldown: "&cYou are on cooldown for another &f{cooldown} &cseconds."
+  no_tokens: "&cYou don't have enough JoinMe tokens."
+  broadcast: "&cJoinMe &8\u00bb &f{player} &fwants you to join! &7(click)"
+
+joinme-color:
+  usage: "&cUsage: &f/joinmecolor &c<color> &for &f/joinmecolor reset"
+  reset: "&aYour JoinMe color has been reset to default."
+  set: "&aYour JoinMe color has been updated."
 
 tokens:
-  error: "<red>Could not retrieve your token data.</red>"
+  error: "&cCould not retrieve your token data."
   status:
-    unlimited: "<green>Unlimited</green>"
-    available: "<green>Available</green>"
-    empty: "<red>Out of tokens</red>"
+    unlimited: "&aUnlimited"
+    available: "&aAvailable"
+    empty: "&cOut of tokens"
   cooldown:
-    bypassed: "<green>Bypassed</green>"
-    ready: "<green>Ready</green>"
+    bypassed: "&aBypassed"
+    ready: "&aReady"
   info: |-
-    <#ff0000>&lGraviJet <dark_gray>» <white>&lJoinMe Tokens
-    <#ff0000>Status<dark_gray>:    <white><status>
-    <#ff0000>Total<dark_gray>:     <white><total>
-    <#ff0000>Monthly<dark_gray>:   <white><monthly> <dark_gray>(resets monthly)
-    <#ff0000>Permanent<dark_gray>: <white><permanent> <dark_gray>(never expires)
-    <#ff0000>Cooldown<dark_gray>:  <white><cooldown>
-  store-link: "<gold>Click here to buy more tokens!</gold><click:open_url:'https://example.invalid'>"
+    &cGraviJet &8\u00bb &f&lJoinMe Tokens
+    &cStatus&8:     &f{status}
+    &cTotal&8:      &f{total}
+    &cMonthly&8:    &f{monthly} &7(resets monthly)
+    &cPermanent&8:  &f{permanent} &7(never expires)
+    &cCooldown&8:   &f{cooldown}
+  store-link: "&fBuy more tokens at &example.invalid&f."
 
 admin-joinme:
   help:
-    - "<prefix><bold>AdminJoinMe Help</bold>"
-    - "<gray>/ajm tokens <player> - View a player's tokens."
-    - "<gray>/ajm forcejoinme <player> - Force a JoinMe for a player."
-    - "<gray>/ajm addtokens <player> <amount> - Add permanent tokens to a player."
-    - "<gray>/ajm removetokens <player> <amount> - Remove permanent tokens from a player."
-  tokens-header: "<prefix>Tokens for <white><player></white>"
-  tokens-error: "<red>Could not retrieve token data for that player.</red>"
-  force-success: "<green>Successfully forced a JoinMe for <white><player></white>.</green>"
-  force-received: "<green>An admin has activated a JoinMe for you.</green>"
-  add-success: "<green>Added <white><amount></white> permanent tokens to <white><player></white>.</green>"
-  add-received: "<green>An admin has given you <white><amount></white> permanent tokens.</green>"
-  add-failed: "<red>Failed to add tokens.</red>"
-  remove-success: "<green>Removed <white><amount></white> permanent tokens from <white><player></white>.</green>"
-  remove-received: "<red>An admin has removed <white><amount></white> permanent tokens from you.</red>"
-  remove-failed: "<red>Failed to remove tokens.</red>"
+    - "&cGraviJet &8\u00bb &f&lAdminJoinMe Help"
+    - "&f/ajm tokens &c<player> &8\u00bb &fView a player's tokens."
+    - "&f/ajm forcejoinme &c<player> &8\u00bb &fForce a JoinMe for a player."
+    - "&f/ajm addtokens &c<player> <amount> &8\u00bb &fAdd permanent tokens."
+    - "&f/ajm removetokens &c<player> <amount> &8\u00bb &fRemove permanent tokens."
+  tokens-header: "&cGraviJet &8\u00bb &fTokens for &c{player}"
+  tokens-error: "&cCould not retrieve token data for that player."
+  force-success: "&aSuccessfully forced a JoinMe for &f{player}&a."
+  force-received: "&aAn admin has activated a JoinMe for you."
+  add-success: "&aAdded &f{amount} &apermanent tokens to &f{player}&a."
+  add-received: "&aAn admin has given you &f{amount} &apermanent tokens."
+  add-failed: "&cFailed to add tokens."
+  remove-success: "&aRemoved &f{amount} &apermanent tokens from &f{player}&a."
+  remove-received: "&cAn admin has removed &f{amount} &cpermanent tokens from you."
+  remove-failed: "&cFailed to remove tokens."
 
 support:
-  chat-usage: "<red>Usage: /spc <message></red>"
-  ticket-created: "<green>Your support ticket has been created. A staff member will be with you shortly.</green>"
-  ticket-closed: "<green>Your support ticket has been closed.</green>"
-  ticket-auto-closed: "<yellow>Your support ticket was closed due to inactivity.</yellow>"
-  ticket-cooldown: "<red>You must wait <cooldown> minutes before creating a new ticket.</red>"
-  max-tickets: "<red>You have reached the maximum number of open tickets (<max>).</red>"
-  no-open-ticket: "<red>You do not have an open support ticket.</red>"
-  staff-notification: "<aqua>A new support ticket has been created by <player> on <server>.</aqua>"
-  staff-chat-format: "<blue>[Support Chat] <player>: <message></blue>"
-  staff-enter: "<green>You have entered support chat.</green>"
-  staff-leave: "<red>You have left support chat.</red>"
-  staff-cannot-request: "<red>Staff members cannot create support tickets.</red>"
-  already-in-session: "<red>You already have an open support ticket.</red>"
-  no-active-session-for-player: "<red>No active session found for <player>.</red>"
-  already-handling-session: "<red>You are already handling a support session.</red>"
-  already-claimed: "<red>This ticket has already been claimed by <staff>.</red>"
-  claimed-by-you: "<green>You have claimed the support ticket for <player>.</green>"
-  claimed-by-staff: "<green><staff> has claimed your support ticket.</green>"
-  invalid-rating: "<red>Invalid rating. Please use a number between 1 and 5.</red>"
-  not-session-player: "<red>You do not have a recently closed session to rate.</red>"
-  already-rated: "<red>You have already rated this support session.</red>"
-  rating-expired: "<red>The time to rate this session has expired.</red>"
-  rating-received: "<green>Thank you for your rating of <rating>/5.</green>"
-  rating-prompt: "<gold>Please rate your support experience from 1 to 5 stars.</gold>"
-  player-online-status: "<gray><player> is now online.</gray>"
-  player-offline-status: "<gray><player> has gone offline.</gray>"
-  you-are-banned: "<red>You are banned from the support system. Remaining: <duration></red>"
-  player-banned: "<green>You have banned <player> from the support system for <duration>.</green>"
-  invalid-duration: "<red>Invalid duration format. Use 1d, 2h, 3m, etc.</red>"
-  you-are-unbanned: "<green>You have been unbanned from the support system.</green>"
-  player-unbanned: "<green>You have unbanned <player>.</green>"
+  chat-usage: "&cUsage: &f/spc <message>"
+  ticket-created: "&aYour support ticket has been created. A staff member will be with you shortly."
+  ticket-closed: "&aYour support ticket has been closed."
+  ticket-closed-staff: "&aSupport ticket for &f{player} &ahas been closed."
+  ticket-auto-closed: "&eYour support ticket was closed due to inactivity."
+  ticket-cooldown: "&cPlease wait &f{cooldown} &cminutes before opening another ticket."
+  max-tickets: "&cYou have reached the maximum number of open tickets &f({max})&c."
+  no-open-ticket: "&cYou don't have an open support ticket."
+  staff-notification: "&cNew ticket &8\u00bb &f{player} &fon &c{server}"
+  staff-chat-format: "&c[Support] &f{player}&8: &f{message}"
+  staff-enter: "&aYou have entered support chat."
+  staff-leave: "&cYou have left support chat."
+  staff-cannot-request: "&cStaff members cannot create support tickets."
+  already-in-session: "&cYou already have an open support ticket."
+  no-active-session-for-player: "&cNo active session found for &f{player}&c."
+  already-handling-session: "&cYou are already handling a support session."
+  already-claimed: "&cThis ticket has already been claimed by &f{staff}&c."
+  claimed-by-you: "&aYou have claimed the support ticket for &f{player}&a."
+  claimed-by-staff: "&a{staff} &ahas claimed your support ticket."
+  invalid-rating: "&cInvalid rating. Please enter a number between 1 and 5."
+  not-session-player: "&cYou don't have a recently closed session to rate."
+  already-rated: "&cYou have already rated this support session."
+  rating-expired: "&cThe time to rate this session has expired."
+  rating-received: "&aThank you for your rating of &f{rating}/5&a."
+  rating-prompt: "&eRate your support experience: &f/support rate <1-5>"
+  player-online-status: "&7{player} &7is now online."
+  player-offline-status: "&7{player} &7has gone offline."
+  you-are-banned: "&cYou are banned from the support system. Remaining: &f{duration}&c."
+  player-banned: "&aYou have banned &f{player} &afrom the support system for &f{duration}&a."
+  invalid-duration: "&cInvalid duration format. Use 1d, 2h, 30m, etc."
+  you-are-unbanned: "&aYou have been unbanned from the support system."
+  player-unbanned: "&aYou have unbanned &f{player}&a."
+  invalid-command: "&cUnknown subcommand. Use &f/support help &cfor available commands."
+  player-help:
+    - "&cGraviJet &8\u00bb &f&lSupport"
+    - "&f/support de &8\u00bb &fOpen a ticket in German."
+    - "&f/support en &8\u00bb &fOpen a ticket in English."
+    - "&f/support chat <message> &8\u00bb &fSend a message in your ticket."
+    - "&f/support rate <1-5> &8\u00bb &fRate your closed ticket."
+  staff-help:
+    - "&cGraviJet &8\u00bb &f&lSupport &c(Staff)"
+    - "&f/support de/en &8\u00bb &fOpen a ticket."
+    - "&f/support claim <player> &8\u00bb &fClaim a player's ticket."
+    - "&f/support close &8\u00bb &fClose the current session."
+    - "&f/support chat <message> &8\u00bb &fChat in the active session."
   discord:
     already-claimed: "This ticket has already been claimed by {staff}."
     please-claim: "Please claim this ticket before replying."
@@ -108,13 +141,8 @@ support:
     rating-title: "New Rating"
 
 bug:
-  usage: "<red>Usage: /bug <title> <message></red>"
-  title-too-long: "<red>Title is too long. Maximum 100 characters.</red>"
-  message-too-long: "<red>Message is too long. Maximum 1000 characters.</red>"
-  discord-not-available: "<red>Bug reporting is currently unavailable. Please try again later.</red>"
-  report-sent: "<green>Bug report submitted: <title></green>"
-  embed-title: "New Bug Report"
-  embed-footer: "Reported by {player}"
-  embed-field-title: "Title"
-  embed-field-message: "Message"
-  embed-field-server: "Server"
+  usage: "&cUsage: &f/bug <title> <description>"
+  title-too-long: "&cTitle is too long. Maximum 100 characters."
+  message-too-long: "&cDescription is too long. Maximum 1000 characters."
+  discord-not-available: "&cBug reporting is currently unavailable. Please try again later."
+  report-sent: "&aYour bug report &f\"{title}\" &ahas been submitted. Thank you!"

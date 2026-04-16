@@ -13,9 +13,6 @@ import net.gravijet.velocity.core.util.ConfigManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import java.io.File;
 import java.io.IOException;
@@ -34,7 +31,6 @@ import java.util.concurrent.TimeUnit;
 public class SupportManager {
     private final SupportPlugin plugin;
     private final ConfigManager configManager;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final ObjectMapper mapper = new ObjectMapper();
     private final File bansFile;
     private final DateTimeFormatter logFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -103,7 +99,7 @@ public class SupportManager {
 
         Optional<Player> staffOpt = session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer);
         staffOpt.ifPresent(staff -> {
-            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", "player", session.getPlayerName()));
             staffToSession.remove(staff.getUniqueId());
         });
 
@@ -138,7 +134,7 @@ public class SupportManager {
 
     public boolean canRequestSupport(Player player, String lang) {
         if (hasPermission(player, getStaffPermission())) {
-            CompatibilityHelper.sendMessage(player, Component.text("Staff cannot request support"));
+            CompatibilityHelper.sendMessage(player, getMessage("support.staff-cannot-request"));
             return false;
         }
         String banMsg = getBanMessage(player.getUniqueId(), lang);
@@ -147,7 +143,7 @@ public class SupportManager {
             return false;
         }
         if (playerToSession.containsKey(player.getUniqueId())) {
-            CompatibilityHelper.sendMessage(player, Component.text("You already have an active support session"));
+            CompatibilityHelper.sendMessage(player, getMessage("support.already-in-session"));
             return false;
         }
         return true;
@@ -166,9 +162,9 @@ public class SupportManager {
         }
 
         Component component = getMessage("support.staff-notification",
-                Placeholder.unparsed("player", player.getUsername()),
-                Placeholder.unparsed("server", serverName),
-                Placeholder.unparsed("language", language.toUpperCase())
+                "player", player.getUsername(),
+                "server", serverName,
+                "language", language.toUpperCase()
         ).clickEvent(ClickEvent.suggestCommand("/support claim " + player.getUsername()))
                 .hoverEvent(HoverEvent.showText(Component.text("Click to claim this request")));
 
@@ -183,20 +179,20 @@ public class SupportManager {
     public boolean claimSupport(Player staff, String playerName, boolean force) {
         Optional<Player> targetOpt = plugin.getServer().getPlayer(playerName);
         if (targetOpt.isEmpty()) {
-            CompatibilityHelper.sendMessage(staff, getMessage("general.player-not-found", Placeholder.unparsed("player", playerName)));
+            CompatibilityHelper.sendMessage(staff, getMessage("general.player-not-found", "player", playerName));
             return false;
         }
 
         Player target = targetOpt.get();
         UUID sessionId = playerToSession.get(target.getUniqueId());
         if (sessionId == null) {
-            CompatibilityHelper.sendMessage(staff, getMessage("support.no-active-session-for-player", Placeholder.unparsed("player", playerName)));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.no-active-session-for-player", "player", playerName));
             return false;
         }
 
         SupportSession session = activeSessions.get(sessionId);
         if (session == null) {
-            CompatibilityHelper.sendMessage(staff, getMessage("support.no-active-session-for-player", Placeholder.unparsed("player", playerName)));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.no-active-session-for-player", "player", playerName));
             return false;
         }
 
@@ -209,7 +205,7 @@ public class SupportManager {
         boolean alreadyClaimed = session.getStaffId() != null || discordStaffToSession.containsValue(sessionId);
         if (alreadyClaimed && !force) {
             String existingStaff = session.getStaffName() != null ? session.getStaffName() : "a Discord team member";
-            CompatibilityHelper.sendMessage(staff, getMessage("support.already-claimed", Placeholder.unparsed("staff", existingStaff)));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.already-claimed", "staff", existingStaff));
             return false;
         }
 
@@ -222,8 +218,8 @@ public class SupportManager {
         session.setDiscordOnly(false);
         staffToSession.put(staff.getUniqueId(), sessionId);
 
-        CompatibilityHelper.sendMessage(staff, getMessage("support.claimed-by-you", Placeholder.unparsed("player", target.getUsername())));
-        CompatibilityHelper.sendMessage(target, getMessage("support.claimed-by-staff", Placeholder.unparsed("staff", staff.getUsername())));
+        CompatibilityHelper.sendMessage(staff, getMessage("support.claimed-by-you", "player", target.getUsername()));
+        CompatibilityHelper.sendMessage(target, getMessage("support.claimed-by-staff", "staff", staff.getUsername()));
 
         if (plugin.getDiscordBot() != null) {
             plugin.getDiscordBot().updateChannelToClaimed(session.getSessionId().toString(), staff.getUsername(), staff.getUniqueId().toString());
@@ -254,7 +250,7 @@ public class SupportManager {
         discordStaffToSession.put(discordStaffId, sessionId);
         sessionLastActivity.put(sessionId, Instant.now());
 
-        CompatibilityHelper.sendMessage(targetOpt.get(), getMessage("support.claimed-by-staff", Placeholder.unparsed("staff", staffName)));
+        CompatibilityHelper.sendMessage(targetOpt.get(), getMessage("support.claimed-by-staff", "staff", staffName));
         logSessionAction(session, "CLAIMED_DISCORD", "Claimed by Discord user " + staffName);
         return true;
     }
@@ -274,7 +270,7 @@ public class SupportManager {
         }
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", "player", session.getPlayerName()));
             staffToSession.remove(staff.getUniqueId());
         });
 
@@ -305,7 +301,7 @@ public class SupportManager {
         if (session == null) return false;
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", Placeholder.unparsed("player", session.getPlayerName())));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", "player", session.getPlayerName()));
             staffToSession.remove(staff.getUniqueId());
         });
 
@@ -348,8 +344,8 @@ public class SupportManager {
         Optional<Player> playerOpt = plugin.getServer().getPlayer(session.getPlayerId());
 
         Component chatMessage = getMessage("support.staff-chat-format",
-                Placeholder.unparsed("player", sender.getUsername()),
-                Placeholder.unparsed("message", message)
+                "player", sender.getUsername(),
+                "message", message
         );
 
         if (isStaff) {
@@ -377,8 +373,8 @@ public class SupportManager {
         sessionLastActivity.put(sessionId, Instant.now());
 
         Component chatMessage = getMessage("support.staff-chat-format",
-                Placeholder.unparsed("player", "Discord"),
-                Placeholder.unparsed("message", message)
+                "player", "Discord",
+                "message", message
         );
 
         plugin.getServer().getPlayer(session.getPlayerId())
@@ -428,10 +424,10 @@ public class SupportManager {
 
         String staffName = session.getStaffName() != null ? session.getStaffName() : "Unknown";
         ratedSessions.put(session.getSessionId(), new RatedSession(session.getSessionId(), rating, Instant.now(), staffName));
-        CompatibilityHelper.sendMessage(player, getMessage("support.rating-received", Placeholder.unparsed("rating", String.valueOf(rating))));
+        CompatibilityHelper.sendMessage(player, getMessage("support.rating-received", "rating", String.valueOf(rating)));
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff ->
-                CompatibilityHelper.sendMessage(staff, miniMessage.deserialize("<gray>" + player.getUsername() + " rated this session " + rating + "/5.</gray>")));
+                CompatibilityHelper.sendMessage(staff, CompatibilityHelper.colorize("&7" + player.getUsername() + " rated this session &f" + rating + "/5&7.")));
 
         if (plugin.getDiscordBot() != null) {
             plugin.getDiscordBot().sendRatingEmbedToChannel(session.getSessionId().toString(), rating, player.getUsername(), staffName);
@@ -453,7 +449,7 @@ public class SupportManager {
             SupportSession session = activeSessions.get(sessionId);
             if (session != null) {
                 session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-                    CompatibilityHelper.sendMessage(staff, getMessage("support.player-online-status", Placeholder.unparsed("player", player.getUsername())));
+                    CompatibilityHelper.sendMessage(staff, getMessage("support.player-online-status", "player", player.getUsername()));
                     if (plugin.getDiscordBot() != null) {
                         plugin.getDiscordBot().sendStatusMessageToChannel(sessionId.toString(), player.getUsername() + " is online");
                     }
@@ -468,7 +464,7 @@ public class SupportManager {
             SupportSession session = activeSessions.get(sessionId);
             if (session != null) {
                 session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-                    CompatibilityHelper.sendMessage(staff, getMessage("support.player-offline-status", Placeholder.unparsed("player", player.getUsername())));
+                    CompatibilityHelper.sendMessage(staff, getMessage("support.player-offline-status", "player", player.getUsername()));
                     if (plugin.getDiscordBot() != null) {
                         plugin.getDiscordBot().sendStatusMessageToChannel(sessionId.toString(), player.getUsername() + " went offline");
                     }
@@ -486,15 +482,16 @@ public class SupportManager {
             return null;
         }
         String timeLeft = ban.getDuration() == Long.MAX_VALUE ? "permanent" : DurationUtil.format(ban.getRemainingMillis());
-        return configManager.getMessages().node("support", "you-are-banned").getString("<red>You are banned from support. Remaining: <duration></red>").replace("<duration>", timeLeft);
+        return configManager.getMessages().node("support", "you-are-banned").getString("&cYou are banned from the support system. Remaining: &f{duration}&c.").replace("{duration}", timeLeft);
     }
 
-    private Component getMessage(String path, TagResolver... resolvers) {
-        String template = configManager.getMessages().node(path.split("\\.")).getString("");
+    private Component getMessage(String path, String... pairs) {
+        String template = configManager.getMessages().node((Object[]) path.split("\\.")).getString("");
         if (template == null || template.isEmpty()) {
-            return Component.text("Error: Message for " + path + " not found.").color(net.kyori.adventure.text.format.NamedTextColor.RED);
+            return Component.text("Error: Message for " + path + " not found.")
+                    .color(net.kyori.adventure.text.format.NamedTextColor.RED);
         }
-        return miniMessage.deserialize(template, resolvers);
+        return CompatibilityHelper.colorize(template, pairs);
     }
 
     private String getStaffPermission() {

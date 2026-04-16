@@ -6,10 +6,6 @@ import com.velocitypowered.api.proxy.Player;
 import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.managers.JoinMeManager;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
-import org.spongepowered.configurate.ConfigurationNode;
 
 import java.util.List;
 
@@ -17,7 +13,6 @@ public class JoinMeColorCommand implements SimpleCommand {
 
     private final JoinMeManager joinMeManager;
     private final ConfigManager configManager;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public JoinMeColorCommand(JoinMeManager joinMeManager, ConfigManager configManager) {
         this.joinMeManager = joinMeManager;
@@ -28,18 +23,21 @@ public class JoinMeColorCommand implements SimpleCommand {
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
         if (!(source instanceof Player player)) {
-            CompatibilityHelper.sendMessage(source, getMessage("general.players-only"));
+            CompatibilityHelper.sendMessage(source,
+                    CompatibilityHelper.colorize(msg("general.players-only")));
             return;
         }
 
         if (!player.hasPermission("velocitycore.joinme.color")) {
-            CompatibilityHelper.sendMessage(player, getMessage("general.no-permission"));
+            CompatibilityHelper.sendMessage(player,
+                    CompatibilityHelper.colorize(msg("general.no-permission")));
             return;
         }
 
         String[] args = invocation.arguments();
         if (args.length == 0) {
-            CompatibilityHelper.sendMessage(player, getMessage("joinme-color.usage"));
+            CompatibilityHelper.sendMessage(player,
+                    CompatibilityHelper.colorize(msg("joinme-color.usage")));
             return;
         }
 
@@ -47,30 +45,26 @@ public class JoinMeColorCommand implements SimpleCommand {
 
         if (rawColor.equalsIgnoreCase("reset")) {
             joinMeManager.setPlayerColor(player.getUniqueId(), null);
-            CompatibilityHelper.sendMessage(player, getMessage("joinme-color.reset"));
+            CompatibilityHelper.sendMessage(player,
+                    CompatibilityHelper.colorize(msg("joinme-color.reset")));
             return;
         }
 
-        // Basic validation for MiniMessage tags
-        if (!rawColor.matches("<#[0-9a-fA-F]{6}>") && !rawColor.matches("<[a-zA-Z_]+>")) {
-             CompatibilityHelper.sendMessage(player, getMessage("joinme-color.usage"));
-             return;
+        // Validate legacy & color codes (e.g. &c, &a, &#rrggbb)
+        if (!rawColor.matches("&[0-9a-fk-orA-FK-OR]") && !rawColor.matches("&#[0-9a-fA-F]{6}")) {
+            CompatibilityHelper.sendMessage(player,
+                    CompatibilityHelper.colorize(msg("joinme-color.usage")));
+            return;
         }
 
         joinMeManager.setPlayerColor(player.getUniqueId(), rawColor);
-
-        Component preview = miniMessage.deserialize(rawColor + "preview");
-        CompatibilityHelper.sendMessage(player, getMessage("joinme-color.set", Placeholder.component("preview", preview)));
+        CompatibilityHelper.sendMessage(player,
+                CompatibilityHelper.colorize(msg("joinme-color.set")));
     }
 
-    private Component getMessage(String path, net.kyori.adventure.text.minimessage.tag.resolver.TagResolver... resolvers) {
-        String template = getMessageNode(path).getString("");
-        return miniMessage.deserialize(template, resolvers);
-    }
-
-    private ConfigurationNode getMessageNode(String path) {
-        Object[] parts = path.split("\\.");
-        return configManager.getMessages().node(parts);
+    private String msg(String path) {
+        String val = configManager.getMessages().node((Object[]) path.split("\\.")).getString("");
+        return val != null ? val : "";
     }
 
     @Override
@@ -78,9 +72,11 @@ public class JoinMeColorCommand implements SimpleCommand {
         if (!invocation.source().hasPermission("velocitycore.joinme.color")) return List.of();
         String[] args = invocation.arguments();
         if (args.length <= 1) {
-            if ("reset".startsWith(args.length == 1 ? args[0].toLowerCase() : "")) {
-                return List.of("reset");
-            }
+            String prefix = args.length == 1 ? args[0].toLowerCase() : "";
+            return List.of("reset", "&c", "&a", "&e", "&b", "&d", "&6", "&f")
+                    .stream()
+                    .filter(s -> s.startsWith(prefix))
+                    .toList();
         }
         return List.of();
     }

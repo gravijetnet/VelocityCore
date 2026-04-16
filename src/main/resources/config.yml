@@ -28,9 +28,9 @@ advertising:
   enabled: true
   interval_minutes: 5
   messages:
-    - "<gold>Welcome to our server network!</gold>"
-    - "<aqua>Check out our website: <click:open_url:'https://example.invalid'>example.invalid</click></aqua>"
-    - "<yellow>Don't forget to vote for rewards!</yellow>"
+    - "&6Welcome to the GraviJet Network!"
+    - "&fCheck out our website: &cexample.invalid"
+    - "&eDon't forget to vote for rewards!"
 
 # Support system settings
 support:
@@ -47,6 +47,8 @@ support:
     open-color: "BLUE" # Embed color for open tickets
     claimed-color: "YELLOW" # Embed color for claimed tickets
     transcript-color: "PURPLE" # Embed color for transcript messages
+  bug-channel-id: "YOUR_BUG_REPORT_CHANNEL_ID_HERE"
+  bug-tag-id: ""
   max-open-tickets: 3
   ticket-cooldown-minutes: 10
   staff-permission: "velocitycore.support.staff"

@@ -6,20 +6,17 @@ import net.gravijet.velocity.core.support.SupportPlugin;
 import net.gravijet.velocity.core.support.manager.SupportManager;
 import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.spongepowered.configurate.ConfigurationNode;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 public class SupportCommand implements SimpleCommand {
     private final SupportPlugin plugin;
     private final ConfigManager configManager;
     private final SupportManager manager;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public SupportCommand(SupportPlugin plugin) {
         this.plugin = plugin;
@@ -30,12 +27,12 @@ public class SupportCommand implements SimpleCommand {
     @Override
     public void execute(Invocation inv) {
         if (!(inv.source() instanceof Player player)) {
-            CompatibilityHelper.sendMessage(inv.source(), getMessage("general.players-only"));
+            CompatibilityHelper.sendMessage(inv.source(),
+                    CompatibilityHelper.colorize(msg("general.players-only")));
             return;
         }
 
         String[] args = inv.arguments();
-        String lang = "en"; // Default language
 
         if (args.length == 0) {
             showMenu(player);
@@ -47,7 +44,8 @@ public class SupportCommand implements SimpleCommand {
 
             case "de", "en" -> {
                 if (isHelp(args, 1)) {
-                    sendHelp(player, "/support " + args[0], "Open a support request in " + (args[0].equalsIgnoreCase("de") ? "German." : "English."));
+                    sendHelp(player, "/support " + args[0],
+                            "Open a support request in " + (args[0].equalsIgnoreCase("de") ? "German." : "English."));
                     return;
                 }
                 if (manager.canRequestSupport(player, args[0])) {
@@ -69,10 +67,17 @@ public class SupportCommand implements SimpleCommand {
                     return;
                 }
                 try {
-                    // manager.rateSupport(player, Integer.parseInt(args[1])); // This method needs to be refactored in SupportManager
-                    CompatibilityHelper.sendMessage(player, Component.text("Rating is temporarily disabled."));
+                    int rating = Integer.parseInt(args[1]);
+                    if (rating < 1 || rating > 5) {
+                        CompatibilityHelper.sendMessage(player,
+                                CompatibilityHelper.colorize(msg("support.invalid-rating")));
+                        return;
+                    }
+                    CompatibilityHelper.sendMessage(player,
+                            CompatibilityHelper.colorize("&cRating is temporarily disabled."));
                 } catch (NumberFormatException e) {
-                    CompatibilityHelper.sendMessage(player, getMessage("support.invalid-rating"));
+                    CompatibilityHelper.sendMessage(player,
+                            CompatibilityHelper.colorize(msg("support.invalid-rating")));
                 }
             }
 
@@ -80,7 +85,8 @@ public class SupportCommand implements SimpleCommand {
                     "/support claim <player> [--force]", "Claim a support request.", () -> {
                         boolean force = args.length > 2 && "--force".equalsIgnoreCase(args[2]);
                         if (force && !perm(player, "support.force")) {
-                            CompatibilityHelper.sendMessage(player, getMessage("general.no-permission"));
+                            CompatibilityHelper.sendMessage(player,
+                                    CompatibilityHelper.colorize(msg("general.no-permission")));
                             return;
                         }
                         manager.claimSupport(player, args[1], force);
@@ -88,12 +94,11 @@ public class SupportCommand implements SimpleCommand {
 
             case "close" -> staff(player, args, "support.close", 1,
                     "/support close", "Close the current session.",
-                    () -> {
-                        // manager.closeSupportSession(player); // This method needs to be refactored in SupportManager
-                        CompatibilityHelper.sendMessage(player, Component.text("Closing is temporarily disabled."));
-                    });
+                    () -> CompatibilityHelper.sendMessage(player,
+                            CompatibilityHelper.colorize("&cClosing is temporarily disabled.")));
 
-            default -> CompatibilityHelper.sendMessage(player, getMessage("support.invalid-command"));
+            default -> CompatibilityHelper.sendMessage(player,
+                    CompatibilityHelper.colorize(msg("support.invalid-command")));
         }
     }
 
@@ -104,7 +109,8 @@ public class SupportCommand implements SimpleCommand {
             return;
         }
         if (!perm(player, permission)) {
-            CompatibilityHelper.sendMessage(player, getMessage("general.no-permission"));
+            CompatibilityHelper.sendMessage(player,
+                    CompatibilityHelper.colorize(msg("general.no-permission")));
             return;
         }
         if (args.length < minArgs) {
@@ -119,30 +125,31 @@ public class SupportCommand implements SimpleCommand {
     }
 
     private void sendHelp(Player player, String cmd, String desc) {
-        CompatibilityHelper.sendMessage(player, miniMessage.deserialize("<#ff0000>● <red>" + cmd + " <dark_gray>» <white>" + desc));
+        CompatibilityHelper.sendMessage(player,
+                CompatibilityHelper.colorize("&c" + cmd + " &8\u00bb &f" + desc));
     }
 
     private boolean perm(Player p, String permission) {
-        String basePerm = configManager.getConfig().node("support", "staff-permission").getString("velocitycore.support.staff");
+        String basePerm = configManager.getConfig()
+                .node("support", "staff-permission").getString("velocitycore.support.staff");
         return p.hasPermission(basePerm + "." + permission) || p.hasPermission(basePerm + ".*");
     }
 
     private void showMenu(Player player) {
         String key = perm(player, "view") ? "support.staff-help" : "support.player-help";
-        ConfigurationNode helpNode = configManager.getMessages().node(key.split("\\."));
+        ConfigurationNode helpNode = configManager.getMessages().node((Object[]) key.split("\\."));
         if (helpNode.isList()) {
             helpNode.childrenList().stream()
                     .map(ConfigurationNode::getString)
-                    .forEach(line -> CompatibilityHelper.sendMessage(player, miniMessage.deserialize(line)));
+                    .filter(Objects::nonNull)
+                    .forEach(line -> CompatibilityHelper.sendMessage(player,
+                            CompatibilityHelper.colorize(line)));
         }
     }
-    
-    private Component getMessage(String path, TagResolver... resolvers) {
-        String template = configManager.getMessages().node(path.split("\\.")).getString("");
-        if (template == null || template.isEmpty()) {
-            return Component.text("Error: Message for " + path + " not found.").color(net.kyori.adventure.text.format.NamedTextColor.RED);
-        }
-        return miniMessage.deserialize(template, resolvers);
+
+    private String msg(String path) {
+        String val = configManager.getMessages().node((Object[]) path.split("\\.")).getString("");
+        return val != null ? val : "";
     }
 
     @Override
@@ -150,7 +157,7 @@ public class SupportCommand implements SimpleCommand {
         if (inv.source() instanceof Player p && inv.arguments().length <= 1) {
             if (perm(p, "view")) {
                 return CompletableFuture.completedFuture(List.of(
-                        "help", "claim", "close", "transfer", "show", "setlanguage", "ban", "unban", "link", "unlink", "de", "en"));
+                        "help", "claim", "close", "transfer", "de", "en", "chat", "rate"));
             }
             return CompletableFuture.completedFuture(List.of("help", "de", "en", "chat", "rate"));
         }

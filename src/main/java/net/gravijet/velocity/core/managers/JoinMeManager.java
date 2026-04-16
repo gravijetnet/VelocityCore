@@ -8,13 +8,11 @@ import net.gravijet.velocity.core.Main;
 import net.gravijet.velocity.core.database.models.PlayerData;
 import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
+import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.sound.Sound;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import java.util.Map;
 import java.util.UUID;
@@ -30,7 +28,6 @@ public class JoinMeManager {
     private final ProxyServer proxy;
     private final TokenManager tokenManager;
     private final ConfigManager configManager;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Map<UUID, Long> cooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, String> colorPreferences = new ConcurrentHashMap<>();
 
@@ -44,7 +41,7 @@ public class JoinMeManager {
     public CompletableFuture<Boolean> sendJoinMe(Player player, boolean isAdmin) {
         long cooldownSeconds = getCooldown(player.getUniqueId());
         if (!isAdmin && !player.hasPermission("velocitycore.joinme.cooldown.bypass") && cooldownSeconds > 0) {
-            CompatibilityHelper.sendMessage(player, getMessage("joinme.on_cooldown", Placeholder.unparsed("cooldown", String.valueOf(cooldownSeconds))));
+            CompatibilityHelper.sendMessage(player, getMessage("joinme.on_cooldown", "cooldown", String.valueOf(cooldownSeconds)));
             return CompletableFuture.completedFuture(false);
         }
 
@@ -59,7 +56,7 @@ public class JoinMeManager {
                 return CompletableFuture.completedFuture(true);
             }
             if (data == null || data.getTotalTokens() <= 0) {
-                CompatibilityHelper.sendMessage(player, getMessage("joinme.no_tokens"));
+                CompatibilityHelper.sendMessage(player, getMessage("joinme.no_tokens", new String[0]));
                 return CompletableFuture.completedFuture(false);
             }
             return tokenManager.useToken(player.getUniqueId()).thenApply(success -> {
@@ -71,8 +68,8 @@ public class JoinMeManager {
                     broadcastJoinMe(player, false);
                     return true;
                 }
-                // Assuming a generic error message if token use fails
-                CompatibilityHelper.sendMessage(player, miniMessage.deserialize("<red>Could not use your token. Please try again.</red>"));
+                CompatibilityHelper.sendMessage(player,
+                        CompatibilityHelper.colorize("&cCould not use your token. Please try again."));
                 return false;
             });
         });
@@ -91,15 +88,9 @@ public class JoinMeManager {
     }
 
     private Component buildBroadcast(Player player, String serverName, boolean isAdmin) {
-        String template = configManager.getMessages().node("joinme", "broadcast").getString("");
-
-        // Create a resolver for the player's name
-        TagResolver playerResolver = Placeholder.unparsed("player", player.getUsername());
-
-        // Deserialize the message using the resolver
-        Component parsedMessage = miniMessage.deserialize(template, playerResolver);
-
-        // Add the click event to the entire component
+        String template = configManager.getMessages().node("joinme", "broadcast").getString(
+                "&cJoinMe &8\u00bb &f{player} &fwants you to join! &7(click)");
+        Component parsedMessage = CompatibilityHelper.colorize(template, "player", player.getUsername());
         return parsedMessage.clickEvent(ClickEvent.runCommand("/server " + serverName));
     }
 
@@ -140,8 +131,8 @@ public class JoinMeManager {
         return null;
     }
 
-    private Component getMessage(String path, net.kyori.adventure.text.minimessage.tag.resolver.TagResolver... resolvers) {
-        String template = configManager.getMessages().node(path.split("\\.")).getString("");
-        return miniMessage.deserialize(template, resolvers);
+    private Component getMessage(String path, String... pairs) {
+        String template = configManager.getMessages().node((Object[]) path.split("\\.")).getString("");
+        return CompatibilityHelper.colorize(template != null ? template : "", pairs);
     }
 }

@@ -20,6 +20,10 @@ import discord4j.core.spec.MessageCreateSpec;
 import discord4j.core.spec.TextChannelCreateSpec;
 import discord4j.discordjson.json.ApplicationCommandOptionData;
 import discord4j.discordjson.json.ApplicationCommandRequest;
+import discord4j.discordjson.json.EmbedData;
+import discord4j.discordjson.json.EmbedFieldData;
+import discord4j.discordjson.json.ForumThreadMessageParamData;
+import discord4j.discordjson.json.StartThreadWithoutMessageRequest;
 import discord4j.rest.util.Color;
 import net.gravijet.velocity.core.support.SupportPlugin;
 import net.gravijet.velocity.core.support.manager.SupportManager;
@@ -438,39 +442,47 @@ public class DiscordBot {
         }
     }
 
-        public void sendBugReport(String playerName, String serverName, String title, String message) {
+    public void sendBugReport(String playerName, String serverName, String title, String message) {
         if (client == null) {
             plugin.getLogger().warn("Discord bot not connected, cannot send bug report.");
             return;
         }
 
-        try {
-            // Bug report channel ID (form channel)
-            String bugChannelId = "000000000000000000";
-            TextChannel channel = (TextChannel) client.getChannelById(Snowflake.of(bugChannelId)).block();
-            if (channel == null) {
-                plugin.getLogger().error("Bug report channel not found: {}", bugChannelId);
-                return;
-            }
+        ConfigurationNode discordNode = configManager.getConfig().node("support");
+        String bugChannelId = discordNode.node("bug-channel-id").getString("000000000000000000");
+        String tagId = discordNode.node("bug-tag-id").getString("");
 
-            EmbedCreateSpec embed = EmbedCreateSpec.builder()
-                    .color(Color.of(0xFFA500)) // Orange color for bug reports
+        try {
+            String timeStr = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
+                    .format(LocalDateTime.now(ZoneId.systemDefault()));
+
+            // Build embed at REST level (works regardless of channel type)
+            EmbedData embed = EmbedData.builder()
+                    .color(0xFFA500)
                     .title("Bug Report: " + title)
-                    .addField("Reported by", playerName, true)
-                    .addField("Server", serverName, true)
-                    .addField("Time", DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
-                            .format(LocalDateTime.now(ZoneId.systemDefault())), true)
-                    .addField("Description", message, false)
-                    .timestamp(Instant.now())
-                    .footer("Bug Report", null)
+                    .addField(EmbedFieldData.builder().name("Reported by").value(playerName).inline(true).build())
+                    .addField(EmbedFieldData.builder().name("Server").value(serverName).inline(true).build())
+                    .addField(EmbedFieldData.builder().name("Time").value(timeStr).inline(true).build())
+                    .addField(EmbedFieldData.builder().name("Description").value(message).inline(false).build())
                     .build();
 
-            // Create message with tag
-            String tagId = "000000000000000000";
-            channel.createMessage(MessageCreateSpec.builder()
-                    .content("<@&" + tagId + ">")
-                    .addEmbed(embed)
-                    .build()).subscribe();
+            // Build the initial message content
+            var msgBuilder = ForumThreadMessageParamData.builder().addEmbed(embed);
+            if (tagId != null && !tagId.isEmpty()) {
+                msgBuilder.content("<@&" + tagId + ">");
+            }
+
+            // Use startThreadWithoutMessage to post into a forum channel (type 15)
+            // This also works if the target is a standard text channel thread
+            String threadName = "Bug: " + title.substring(0, Math.min(title.length(), 90));
+            StartThreadWithoutMessageRequest request = StartThreadWithoutMessageRequest.builder()
+                    .name(threadName)
+                    .message(msgBuilder.build())
+                    .build();
+
+            client.getRestClient().getChannelService()
+                    .startThreadWithoutMessage(Long.parseLong(bugChannelId), request, null)
+                    .block();
 
             plugin.getLogger().info("Bug report sent from {} on {}: {}", playerName, serverName, title);
         } catch (Exception e) {

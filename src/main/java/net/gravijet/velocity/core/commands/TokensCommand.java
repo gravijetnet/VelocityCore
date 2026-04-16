@@ -8,10 +8,6 @@ import net.gravijet.velocity.core.managers.JoinMeManager;
 import net.gravijet.velocity.core.managers.TokenManager;
 import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 import java.util.concurrent.TimeUnit;
 
@@ -20,7 +16,6 @@ public class TokensCommand implements SimpleCommand {
     private final TokenManager tokenManager;
     private final JoinMeManager joinMeManager;
     private final ConfigManager configManager;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public TokensCommand(ProxyServer proxy, TokenManager tokenManager, JoinMeManager joinMeManager, ConfigManager configManager) {
         this.tokenManager = tokenManager;
@@ -32,56 +27,61 @@ public class TokensCommand implements SimpleCommand {
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
         if (!(source instanceof Player player)) {
-            CompatibilityHelper.sendMessage(source, getMessage("general.players-only"));
+            CompatibilityHelper.sendMessage(source,
+                    CompatibilityHelper.colorize(msg("general.players-only")));
             return;
         }
         if (!player.hasPermission("velocitycore.tokens.view")) {
-            CompatibilityHelper.sendMessage(player, getMessage("general.no-permission"));
+            CompatibilityHelper.sendMessage(player,
+                    CompatibilityHelper.colorize(msg("general.no-permission")));
             return;
         }
 
         tokenManager.getPlayerData(player.getUniqueId()).thenAccept(data -> {
             if (data == null) {
-                CompatibilityHelper.sendMessage(player, getMessage("tokens.error"));
+                CompatibilityHelper.sendMessage(player,
+                        CompatibilityHelper.colorize(msg("tokens.error")));
                 return;
             }
 
             boolean unlimited = tokenManager.hasUnlimitedTokens(player.getUniqueId());
             long cooldownSeconds = joinMeManager.getCooldown(player.getUniqueId());
 
+            // Get raw strings (not deserialized) so they can be embedded as placeholders
             String status;
             if (unlimited) {
-                status = getMessage("tokens.status.unlimited").toString();
+                status = msg("tokens.status.unlimited");
             } else if (data.getTotalTokens() > 0) {
-                status = getMessage("tokens.status.available").toString();
+                status = msg("tokens.status.available");
             } else {
-                status = getMessage("tokens.status.empty").toString();
+                status = msg("tokens.status.empty");
             }
 
-            String total = unlimited ? "∞" : String.valueOf(data.getTotalTokens());
-            String monthly = unlimited ? "∞" : String.valueOf(data.getMonthlyTokens());
-            String permanent = unlimited ? "∞" : String.valueOf(data.getPermanentTokens());
-            
+            String total = unlimited ? "\u221e" : String.valueOf(data.getTotalTokens());
+            String monthly = unlimited ? "\u221e" : String.valueOf(data.getMonthlyTokens());
+            String permanent = unlimited ? "\u221e" : String.valueOf(data.getPermanentTokens());
+
             String cooldown;
             if (player.hasPermission("velocitycore.joinme.cooldown.bypass")) {
-                cooldown = getMessage("tokens.cooldown.bypassed").toString();
+                cooldown = msg("tokens.cooldown.bypassed");
             } else if (cooldownSeconds > 0) {
                 cooldown = formatDuration(cooldownSeconds);
             } else {
-                cooldown = getMessage("tokens.cooldown.ready").toString();
+                cooldown = msg("tokens.cooldown.ready");
             }
 
-            CompatibilityHelper.sendMessage(player, getMessage("tokens.info",
-                    Placeholder.unparsed("status", status),
-                    Placeholder.unparsed("total", total),
-                    Placeholder.unparsed("monthly", monthly),
-                    Placeholder.unparsed("permanent", permanent),
-                    Placeholder.unparsed("cooldown", cooldown)
+            CompatibilityHelper.sendMessage(player, CompatibilityHelper.colorize(
+                    msg("tokens.info"),
+                    "status", status,
+                    "total", total,
+                    "monthly", monthly,
+                    "permanent", permanent,
+                    "cooldown", cooldown
             ));
 
-            String storeLink = configManager.getMessages().node("tokens", "store-link").getString();
-            if (storeLink != null && !storeLink.isEmpty()) {
-                CompatibilityHelper.sendMessage(player, miniMessage.deserialize(storeLink));
+            String storeLink = msg("tokens.store-link");
+            if (!storeLink.isEmpty()) {
+                CompatibilityHelper.sendMessage(player, CompatibilityHelper.colorize(storeLink));
             }
         });
     }
@@ -92,12 +92,9 @@ public class TokensCommand implements SimpleCommand {
         return String.format("%d:%02d", minutes, remainingSeconds);
     }
 
-    private Component getMessage(String path, TagResolver... resolvers) {
-        String template = configManager.getMessages().node(path.split("\\.")).getString("");
-        if (template == null || template.isEmpty()) {
-            return Component.text("Error: Message for " + path + " not found.").color(net.kyori.adventure.text.format.NamedTextColor.RED);
-        }
-        return miniMessage.deserialize(template, resolvers);
+    private String msg(String path) {
+        String val = configManager.getMessages().node((Object[]) path.split("\\.")).getString("");
+        return val != null ? val : "";
     }
 
     @Override

@@ -3,95 +3,39 @@ package net.gravijet.velocity.core.util;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.Player;
 import net.kyori.adventure.text.Component;
-
-import java.lang.reflect.Method;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 public class CompatibilityHelper {
-    
-    private static Method playerSendMessageMethod = null;
-    private static Method sourceSendMessageMethod = null;
-    private static boolean reflectionFailed = false;
-    
+
+    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
+
+    /**
+     * Parses a string with legacy &amp; color codes into a Component.
+     */
+    public static Component colorize(String text) {
+        if (text == null || text.isEmpty()) return Component.empty();
+        return LEGACY.deserialize(text);
+    }
+
+    /**
+     * Replaces {key} placeholders in the text, then parses legacy &amp; color codes.
+     * Pass key-value pairs: colorize(template, "player", "Steve", "server", "lobby")
+     */
+    public static Component colorize(String text, String... pairs) {
+        if (text == null || text.isEmpty()) return Component.empty();
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            text = text.replace("{" + pairs[i] + "}", pairs[i + 1] != null ? pairs[i + 1] : "");
+        }
+        return LEGACY.deserialize(text);
+    }
+
     public static void sendMessage(Player player, Component component) {
         if (player == null || component == null) return;
-        
-        // Try direct method first (should work if Adventure classes are compatible)
-        try {
-            player.sendMessage(component);
-            return;
-        } catch (NoSuchMethodError e) {
-            // Fall back to reflection
-            try {
-                if (playerSendMessageMethod == null && !reflectionFailed) {
-                    // Try to find the correct method
-                    for (Method method : Player.class.getMethods()) {
-                        if (method.getName().equals("sendMessage") && 
-                            method.getParameterCount() == 1 &&
-                            method.getParameterTypes()[0].getName().contains("Component")) {
-                            playerSendMessageMethod = method;
-                            break;
-                        }
-                    }
-                    if (playerSendMessageMethod == null) {
-                        reflectionFailed = true;
-                    }
-                }
-                
-                if (playerSendMessageMethod != null) {
-                    playerSendMessageMethod.invoke(player, component);
-                    return;
-                }
-            } catch (Exception ex) {
-                // Last resort: send plain text
-                try {
-                    // Try to get plain text from component
-                    String text = component.toString();
-                    player.sendMessage(Component.text(text));
-                } catch (Exception ex2) {
-                    player.sendMessage(Component.text("Error sending message"));
-                }
-            }
-        }
+        player.sendMessage(component);
     }
 
     public static void sendMessage(CommandSource source, Component component) {
         if (source == null || component == null) return;
-
-        // Try direct method first
-        try {
-            source.sendMessage(component);
-            return;
-        } catch (NoSuchMethodError e) {
-            // Fall back to reflection
-            try {
-                if (sourceSendMessageMethod == null && !reflectionFailed) {
-                    // Try to find the correct method
-                    for (Method method : CommandSource.class.getMethods()) {
-                        if (method.getName().equals("sendMessage") &&
-                            method.getParameterCount() == 1 &&
-                            method.getParameterTypes()[0].getName().contains("Component")) {
-                            sourceSendMessageMethod = method;
-                            break;
-                        }
-                    }
-                    if (sourceSendMessageMethod == null) {
-                        reflectionFailed = true;
-                    }
-                }
-
-                if (sourceSendMessageMethod != null) {
-                    sourceSendMessageMethod.invoke(source, component);
-                    return;
-                }
-            } catch (Exception ex) {
-                // Last resort: send plain text
-                try {
-                    String text = component.toString();
-                    source.sendMessage(Component.text(text));
-                } catch (Exception ex2) {
-                    source.sendMessage(Component.text("Error sending message"));
-                }
-            }
-        }
+        source.sendMessage(component);
     }
 }

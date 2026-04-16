@@ -6,15 +6,11 @@ import net.gravijet.velocity.core.support.SupportPlugin;
 import net.gravijet.velocity.core.support.manager.SupportManager;
 import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 public class SupportChatCommand implements SimpleCommand {
 
     private final SupportManager manager;
     private final ConfigManager configManager;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public SupportChatCommand(SupportPlugin plugin) {
         this.manager = plugin.getManager();
@@ -24,24 +20,23 @@ public class SupportChatCommand implements SimpleCommand {
     @Override
     public void execute(Invocation inv) {
         if (!(inv.source() instanceof Player player)) {
-            CompatibilityHelper.sendMessage(inv.source(), getMessage("general.players-only"));
+            CompatibilityHelper.sendMessage(inv.source(),
+                    CompatibilityHelper.colorize(msg("general.players-only")));
             return;
         }
 
         String[] args = inv.arguments();
         if (args.length == 0) {
-            CompatibilityHelper.sendMessage(player, getMessage("support.chat-usage"));
+            CompatibilityHelper.sendMessage(player,
+                    CompatibilityHelper.colorize(msg("support.chat-usage")));
             return;
         }
 
         manager.handleSupportChat(player, String.join(" ", args));
     }
 
-    private Component getMessage(String path, TagResolver... resolvers) {
-        String template = configManager.getMessages().node(path.split("\\.")).getString("");
-        if (template == null || template.isEmpty()) {
-            return Component.text("Error: Message for " + path + " not found.").color(net.kyori.adventure.text.format.NamedTextColor.RED);
-        }
-        return miniMessage.deserialize(template, resolvers);
+    private String msg(String path) {
+        String val = configManager.getMessages().node((Object[]) path.split("\\.")).getString("");
+        return val != null ? val : "";
     }
 }

@@ -3,7 +3,6 @@ package net.gravijet.velocity.core.util;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.Main;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.spongepowered.configurate.ConfigurationNode;
 
 import java.util.List;
@@ -20,7 +19,6 @@ public class AdvertisingManager {
     private final ProxyServer server;
     private final ConfigManager configManager;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private ScheduledFuture<?> task;
     private int currentMessageIndex = 0;
 
@@ -57,7 +55,7 @@ public class AdvertisingManager {
                 currentMessageIndex = 0;
             }
             String message = messages.get(currentMessageIndex++);
-            Component component = miniMessage.deserialize(message);
+            Component component = CompatibilityHelper.colorize(message);
             server.getAllPlayers().forEach(player -> CompatibilityHelper.sendMessage(player, component));
         }, 0, interval, TimeUnit.MINUTES);
     }
