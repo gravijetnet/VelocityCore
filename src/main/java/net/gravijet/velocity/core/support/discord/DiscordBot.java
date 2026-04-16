@@ -20,10 +20,7 @@ import discord4j.core.spec.MessageCreateSpec;
 import discord4j.core.spec.TextChannelCreateSpec;
 import discord4j.discordjson.json.ApplicationCommandOptionData;
 import discord4j.discordjson.json.ApplicationCommandRequest;
-import discord4j.discordjson.json.EmbedData;
-import discord4j.discordjson.json.EmbedFieldData;
-import discord4j.discordjson.json.ForumThreadMessageParamData;
-import discord4j.discordjson.json.StartThreadWithoutMessageRequest;
+
 import discord4j.rest.util.Color;
 import net.gravijet.velocity.core.support.SupportPlugin;
 import net.gravijet.velocity.core.support.manager.SupportManager;
@@ -49,6 +46,7 @@ public class DiscordBot {
     private final ConfigManager configManager;
     private final SupportManager manager;
     private GatewayDiscordClient client;
+    private String botToken;
 
     private final Map<String, TextChannel> sessionToChannel = new ConcurrentHashMap<>();
     private final Map<String, String> channelToSession = new ConcurrentHashMap<>();
@@ -75,6 +73,7 @@ public class DiscordBot {
                 plugin.getLogger().error("Discord bot token is not set in config.yml. Bot will not start.");
                 return;
             }
+            this.botToken = token;
             this.client = DiscordClient.create(token).login().block();
             if (client == null) {
                 plugin.getLogger().error("Discord login failed.");
@@ -456,33 +455,51 @@ public class DiscordBot {
             String timeStr = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
                     .format(LocalDateTime.now(ZoneId.systemDefault()));
 
-            // Build embed at REST level (works regardless of channel type)
-            EmbedData embed = EmbedData.builder()
-                    .color(0xFFA500)
-                    .title("Bug Report: " + title)
-                    .addField(EmbedFieldData.builder().name("Reported by").value(playerName).inline(true).build())
-                    .addField(EmbedFieldData.builder().name("Server").value(serverName).inline(true).build())
-                    .addField(EmbedFieldData.builder().name("Time").value(timeStr).inline(true).build())
-                    .addField(EmbedFieldData.builder().name("Description").value(message).inline(false).build())
-                    .build();
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
-            // Build the initial message content
-            var msgBuilder = ForumThreadMessageParamData.builder().addEmbed(embed);
+            // Build embed as JSON
+            com.fasterxml.jackson.databind.node.ObjectNode embedNode = mapper.createObjectNode();
+            embedNode.put("color", 0xFFA500);
+            embedNode.put("title", "Bug Report: " + title);
+            com.fasterxml.jackson.databind.node.ArrayNode fieldsArray = embedNode.putArray("fields");
+            fieldsArray.add(mapper.createObjectNode().put("name", "Reported by").put("value", playerName).put("inline", true));
+            fieldsArray.add(mapper.createObjectNode().put("name", "Server").put("value", serverName).put("inline", true));
+            fieldsArray.add(mapper.createObjectNode().put("name", "Time").put("value", timeStr).put("inline", true));
+            fieldsArray.add(mapper.createObjectNode().put("name", "Description").put("value", message).put("inline", false));
+
+            // Build message payload
+            com.fasterxml.jackson.databind.node.ObjectNode msgNode = mapper.createObjectNode();
             if (tagId != null && !tagId.isEmpty()) {
-                msgBuilder.content("<@&" + tagId + ">");
+                msgNode.put("content", "<@&" + tagId + ">");
+            }
+            msgNode.putArray("embeds").add(embedNode);
+
+            // Build thread creation request body
+            String threadName = "Bug: " + title.substring(0, Math.min(title.length(), 90));
+            com.fasterxml.jackson.databind.node.ObjectNode bodyNode = mapper.createObjectNode();
+            bodyNode.put("name", threadName);
+            bodyNode.set("message", msgNode);
+            if (tagId != null && !tagId.isEmpty()) {
+                bodyNode.putArray("applied_tags").add(tagId);
             }
 
-            // Use startThreadWithoutMessage to post into a forum channel (type 15)
-            // This also works if the target is a standard text channel thread
-            String threadName = "Bug: " + title.substring(0, Math.min(title.length(), 90));
-            StartThreadWithoutMessageRequest request = StartThreadWithoutMessageRequest.builder()
-                    .name(threadName)
-                    .message(msgBuilder.build())
+            String requestBody = mapper.writeValueAsString(bodyNode);
+
+            java.net.http.HttpClient httpClient = java.net.http.HttpClient.newHttpClient();
+            java.net.http.HttpRequest httpRequest = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("https://discord.com/api/v10/channels/" + bugChannelId + "/threads"))
+                    .header("Authorization", "Bot " + botToken)
+                    .header("Content-Type", "application/json")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            client.getRestClient().getChannelService()
-                    .startThreadWithoutMessage(Long.parseLong(bugChannelId), request, null)
-                    .block();
+            java.net.http.HttpResponse<String> response = httpClient.send(
+                    httpRequest, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                plugin.getLogger().error("Failed to send bug report. Status: {}, Body: {}",
+                        response.statusCode(), response.body());
+                return;
+            }
 
             plugin.getLogger().info("Bug report sent from {} on {}: {}", playerName, serverName, title);
         } catch (Exception e) {
