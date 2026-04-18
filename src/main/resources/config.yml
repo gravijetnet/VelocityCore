@@ -28,9 +28,9 @@ advertising:
   enabled: true
   interval_minutes: 5
   messages:
-    - "&6Welcome to the GraviJet Network!"
-    - "&fCheck out our website: &cexample.invalid"
-    - "&eDon't forget to vote for rewards!"
+    - "<gold>Welcome to the GraviJet Network!"
+    - "<white>Check out our website: <red>example.invalid"
+    - "<yellow>Don't forget to vote for rewards!"
 
 # Support system settings
 support:

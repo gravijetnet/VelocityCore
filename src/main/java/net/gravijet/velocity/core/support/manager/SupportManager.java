@@ -473,6 +473,42 @@ public class SupportManager {
         }
     }
 
+    public void banPlayer(Player staff, String playerName, String durationStr) {
+        Optional<Player> targetOpt = plugin.getServer().getPlayer(playerName);
+        if (targetOpt.isEmpty()) {
+            CompatibilityHelper.sendMessage(staff, getMessage("general.player-not-found", "player", playerName));
+            return;
+        }
+        Player target = targetOpt.get();
+        long millis = DurationUtil.parse(durationStr);
+        if (millis < 0) {
+            CompatibilityHelper.sendMessage(staff, getMessage("support.invalid-duration"));
+            return;
+        }
+        BanEntry ban = new BanEntry(target.getUniqueId(), staff.getUniqueId(), Instant.now(), millis);
+        bans.put(target.getUniqueId(), ban);
+        saveBans();
+        String formatted = DurationUtil.format(millis);
+        CompatibilityHelper.sendMessage(staff, getMessage("support.player-banned", "player", target.getUsername(), "duration", formatted));
+        CompatibilityHelper.sendMessage(target, getMessage("support.you-are-banned", "duration", formatted));
+    }
+
+    public void unbanPlayer(Player staff, String playerName) {
+        Optional<Player> targetOpt = plugin.getServer().getPlayer(playerName);
+        if (targetOpt.isEmpty()) {
+            CompatibilityHelper.sendMessage(staff, getMessage("general.player-not-found", "player", playerName));
+            return;
+        }
+        Player target = targetOpt.get();
+        if (bans.remove(target.getUniqueId()) != null) {
+            saveBans();
+            CompatibilityHelper.sendMessage(staff, getMessage("support.player-unbanned", "player", target.getUsername()));
+            CompatibilityHelper.sendMessage(target, getMessage("support.you-are-unbanned"));
+        } else {
+            CompatibilityHelper.sendMessage(staff, getMessage("support.not-banned", "player", target.getUsername()));
+        }
+    }
+
     public String getBanMessage(UUID playerId, String lang) {
         BanEntry ban = bans.get(playerId);
         if (ban == null) return null;

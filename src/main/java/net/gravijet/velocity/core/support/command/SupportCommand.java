@@ -73,8 +73,7 @@ public class SupportCommand implements SimpleCommand {
                                 CompatibilityHelper.colorize(msg("support.invalid-rating")));
                         return;
                     }
-                    CompatibilityHelper.sendMessage(player,
-                            CompatibilityHelper.colorize("<red>Rating is temporarily disabled."));
+                    manager.rateSupport(player, rating);
                 } catch (NumberFormatException e) {
                     CompatibilityHelper.sendMessage(player,
                             CompatibilityHelper.colorize(msg("support.invalid-rating")));
@@ -94,8 +93,15 @@ public class SupportCommand implements SimpleCommand {
 
             case "close" -> staff(player, args, "support.close", 1,
                     "/support close", "Close the current session.",
-                    () -> CompatibilityHelper.sendMessage(player,
-                            CompatibilityHelper.colorize("<red>Closing is temporarily disabled.")));
+                    () -> manager.closeSupportSession(player));
+
+            case "ban" -> staff(player, args, "support.ban", 3,
+                    "/support ban <player> <duration>", "Ban a player from support.",
+                    () -> manager.banPlayer(player, args[1], args[2]));
+
+            case "unban" -> staff(player, args, "support.unban", 2,
+                    "/support unban <player>", "Unban a player from support.",
+                    () -> manager.unbanPlayer(player, args[1]));
 
             default -> CompatibilityHelper.sendMessage(player,
                     CompatibilityHelper.colorize(msg("support.invalid-command")));
@@ -157,7 +163,7 @@ public class SupportCommand implements SimpleCommand {
         if (inv.source() instanceof Player p && inv.arguments().length <= 1) {
             if (perm(p, "view")) {
                 return CompletableFuture.completedFuture(List.of(
-                        "help", "claim", "close", "transfer", "de", "en", "chat", "rate"));
+                        "help", "claim", "close", "transfer", "de", "en", "chat", "rate", "ban", "unban"));
             }
             return CompletableFuture.completedFuture(List.of("help", "de", "en", "chat", "rate"));
         }
