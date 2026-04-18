@@ -88,8 +88,10 @@ public class JoinMeManager {
 
     private Component buildBroadcast(Player player, String serverName, boolean isAdmin) {
         String template = configManager.getMessages().node("joinme", "broadcast").getString(
-                "<red>JoinMe <dark_gray>» <white>{player} <white>wants you to join! <gray>(click)");
-        Component parsedMessage = CompatibilityHelper.colorize(template, "player", player.getUsername());
+                "<red>JoinMe <dark_gray>» {color}{player} <white>wants you to join! <gray>(click)");
+        String color = getPlayerColorPreference(player.getUniqueId());
+        if (color == null) color = "<white>";
+        Component parsedMessage = CompatibilityHelper.colorize(template, "color", color, "player", player.getUsername());
         return parsedMessage.clickEvent(ClickEvent.runCommand("/server " + serverName));
     }
 
@@ -107,13 +109,14 @@ public class JoinMeManager {
     }
 
     public void setPlayerColor(UUID uuid, String colorInput) {
-        String normalized = colorInput != null ? colorInput.replace('&', '§') : null;
-        if (normalized == null) {
+        if (colorInput == null) {
             colorPreferences.remove(uuid);
-        } else {
-            colorPreferences.put(uuid, normalized);
+            tokenManager.setPlayerColor(uuid, null);
+            return;
         }
-        tokenManager.setPlayerColor(uuid, normalized);
+        String miniMessage = legacyToMiniMessage(colorInput);
+        colorPreferences.put(uuid, miniMessage);
+        tokenManager.setPlayerColor(uuid, miniMessage);
     }
 
     public String getPlayerColorPreference(UUID uuid) {
@@ -122,12 +125,70 @@ public class JoinMeManager {
         try {
             PlayerData data = tokenManager.getPlayerData(uuid).join();
             if (data != null && data.getColor() != null) {
-                String normalized = data.getColor().replace('&', '§');
-                colorPreferences.put(uuid, normalized);
-                return normalized;
+                String color = data.getColor();
+                // Migrate old §-format (stored before MiniMessage migration)
+                if (color.startsWith("§")) {
+                    color = sectionSignToMiniMessage(color);
+                }
+                colorPreferences.put(uuid, color);
+                return color;
             }
         } catch (Exception ignored) {}
         return null;
+    }
+
+    private static String legacyToMiniMessage(String code) {
+        if (code == null || code.isEmpty()) return "<white>";
+        if (code.startsWith("&#") && code.length() == 8) {
+            return "<" + code.substring(1) + ">";
+        }
+        return switch (code.toLowerCase()) {
+            case "&0" -> "<black>";
+            case "&1" -> "<dark_blue>";
+            case "&2" -> "<dark_green>";
+            case "&3" -> "<dark_aqua>";
+            case "&4" -> "<dark_red>";
+            case "&5" -> "<dark_purple>";
+            case "&6" -> "<gold>";
+            case "&7" -> "<gray>";
+            case "&8" -> "<dark_gray>";
+            case "&9" -> "<blue>";
+            case "&a" -> "<green>";
+            case "&b" -> "<aqua>";
+            case "&c" -> "<red>";
+            case "&d" -> "<light_purple>";
+            case "&e" -> "<yellow>";
+            case "&f" -> "<white>";
+            default -> "<white>";
+        };
+    }
+
+    private static String sectionSignToMiniMessage(String color) {
+        if (color.startsWith("§#") && color.length() == 8) {
+            return "<" + color.substring(1) + ">";
+        }
+        if (color.length() == 2) {
+            return switch (Character.toLowerCase(color.charAt(1))) {
+                case '0' -> "<black>";
+                case '1' -> "<dark_blue>";
+                case '2' -> "<dark_green>";
+                case '3' -> "<dark_aqua>";
+                case '4' -> "<dark_red>";
+                case '5' -> "<dark_purple>";
+                case '6' -> "<gold>";
+                case '7' -> "<gray>";
+                case '8' -> "<dark_gray>";
+                case '9' -> "<blue>";
+                case 'a' -> "<green>";
+                case 'b' -> "<aqua>";
+                case 'c' -> "<red>";
+                case 'd' -> "<light_purple>";
+                case 'e' -> "<yellow>";
+                case 'f' -> "<white>";
+                default -> "<white>";
+            };
+        }
+        return "<white>";
     }
 
     private Component getMessage(String path, String... pairs) {

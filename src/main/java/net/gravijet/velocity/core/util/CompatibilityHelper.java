@@ -22,6 +22,16 @@ public class CompatibilityHelper {
         return MM.deserialize(text);
     }
 
+    /**
+     * Escapes user-provided input so MiniMessage tags inside it are shown literally.
+     * Use this for any player-supplied text (e.g. chat messages) before inserting
+     * it into a MiniMessage template via colorize().
+     */
+    public static String escapeMiniMessage(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\").replace("<", "\\<");
+    }
+
     public static void sendMessage(Player player, Component component) {
         if (player == null || component == null) return;
         player.sendMessage(component);

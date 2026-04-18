@@ -38,7 +38,7 @@ joinme:
     <red>Cooldown<dark_gray>:   <white>{cooldown}
   on_cooldown: "<red>You are on cooldown for another <white>{cooldown} <red>seconds."
   no_tokens: "<red>You don't have enough JoinMe tokens."
-  broadcast: "<red>JoinMe <dark_gray>» <white>{player} <white>wants you to join! <gray>(click)"
+  broadcast: "<red>JoinMe <dark_gray>» {color}{player} <white>wants you to join! <gray>(click)"
 
 joinme-color:
   usage: "<red>Usage: <white>/joinmecolor <red><color> <white>or <white>/joinmecolor reset"

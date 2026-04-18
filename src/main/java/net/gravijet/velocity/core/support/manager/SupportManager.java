@@ -345,7 +345,7 @@ public class SupportManager {
 
         Component chatMessage = getMessage("support.staff-chat-format",
                 "player", sender.getUsername(),
-                "message", message
+                "message", CompatibilityHelper.escapeMiniMessage(message)
         );
 
         if (isStaff) {
@@ -374,7 +374,7 @@ public class SupportManager {
 
         Component chatMessage = getMessage("support.staff-chat-format",
                 "player", "Discord",
-                "message", message
+                "message", CompatibilityHelper.escapeMiniMessage(message)
         );
 
         plugin.getServer().getPlayer(session.getPlayerId())
