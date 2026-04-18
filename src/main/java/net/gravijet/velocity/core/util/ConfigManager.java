@@ -62,7 +62,7 @@ public class ConfigManager {
             return loader.load();
         } catch (ConfigurateException e) {
             CompatibilityHelper.sendMessage(server.getConsoleCommandSource(), Component.text("Error loading " + fileName + ": " + e.getMessage(), NamedTextColor.RED));
-            return null;
+            return CommentedConfigurationNode.root();
         }
     }
 }

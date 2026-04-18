@@ -74,7 +74,7 @@ public class SupportCommand implements SimpleCommand {
                         return;
                     }
                     CompatibilityHelper.sendMessage(player,
-                            CompatibilityHelper.colorize("&cRating is temporarily disabled."));
+                            CompatibilityHelper.colorize("<red>Rating is temporarily disabled."));
                 } catch (NumberFormatException e) {
                     CompatibilityHelper.sendMessage(player,
                             CompatibilityHelper.colorize(msg("support.invalid-rating")));
@@ -95,7 +95,7 @@ public class SupportCommand implements SimpleCommand {
             case "close" -> staff(player, args, "support.close", 1,
                     "/support close", "Close the current session.",
                     () -> CompatibilityHelper.sendMessage(player,
-                            CompatibilityHelper.colorize("&cClosing is temporarily disabled.")));
+                            CompatibilityHelper.colorize("<red>Closing is temporarily disabled.")));
 
             default -> CompatibilityHelper.sendMessage(player,
                     CompatibilityHelper.colorize(msg("support.invalid-command")));
@@ -126,7 +126,7 @@ public class SupportCommand implements SimpleCommand {
 
     private void sendHelp(Player player, String cmd, String desc) {
         CompatibilityHelper.sendMessage(player,
-                CompatibilityHelper.colorize("&c" + cmd + " &8\u00bb &f" + desc));
+                CompatibilityHelper.colorize("<red>" + cmd + " <dark_gray>» <white>" + desc));
     }
 
     private boolean perm(Player p, String permission) {

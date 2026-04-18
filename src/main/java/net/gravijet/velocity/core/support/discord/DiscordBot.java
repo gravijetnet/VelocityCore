@@ -163,7 +163,7 @@ public class DiscordBot {
             String channelId = event.getCustomId().substring(6);
             if (claimedByUserId.containsKey(channelId)) {
                 String claimer = claimedByName.getOrDefault(channelId, "someone");
-                return configManager.getMessages().node("support", "discord", "already-claimed").getString().replace("{staff}", claimer);
+                return configManager.getMessages().node("support", "discord", "already-claimed").getString("This ticket has already been claimed by {staff}.").replace("{staff}", claimer);
             }
 
             String sessionId = channelToSession.get(channelId);
@@ -184,7 +184,7 @@ public class DiscordBot {
                 claimedByName.put(channelId, claimName);
                 discordStaffSession.put(discordId, sessionId);
                 updateChannelToClaimed(sessionId, claimName, discordId);
-                return configManager.getMessages().node("support", "discord", "claim-message").getString().replace("{staff}", claimName);
+                return configManager.getMessages().node("support", "discord", "claim-message").getString("{staff} has claimed this ticket.").replace("{staff}", claimName);
             }
             return "Could not claim the support request.";
         }).subscribeOn(Schedulers.boundedElastic())
@@ -198,7 +198,7 @@ public class DiscordBot {
 
             if (claimerUserId == null || !claimerUserId.equals(member.getId().asString())) {
                 if (!hasManagementRole(member)) {
-                    return configManager.getMessages().node("support", "discord", "only-claimer-can-close").getString();
+                    return configManager.getMessages().node("support", "discord", "only-claimer-can-close").getString("Only the staff member who claimed this ticket can close it.");
                 }
             }
 
@@ -225,8 +225,9 @@ public class DiscordBot {
                     if (sessionId == null) return Mono.empty();
 
                     if (!claimedByUserId.containsKey(channelId)) {
+                        String pleaseClaimMsg = configManager.getMessages().node("support", "discord", "please-claim").getString("Please claim this ticket before replying.");
                         return msg.delete()
-                                .then(channel.createMessage(configManager.getMessages().node("support", "discord", "please-claim").getString()))
+                                .then(channel.createMessage(pleaseClaimMsg))
                                 .then();
                     }
 
@@ -374,7 +375,8 @@ public class DiscordBot {
         claimedByUserId.put(chId, staffDiscordId);
         claimedByName.put(chId, staffName);
         discordStaffSession.put(staffDiscordId, sessionId);
-        sendToChannel(sessionId, configManager.getMessages().node("support", "discord", "claim-message").getString().replace("{staff}", staffName));
+        String claimMsg = configManager.getMessages().node("support", "discord", "claim-message").getString("{staff} has claimed this ticket.");
+        sendToChannel(sessionId, claimMsg.replace("{staff}", staffName));
     }
 
     public void sendMessageToDiscord(String sessionId, String message, String sender, boolean isStaff) {
@@ -385,16 +387,21 @@ public class DiscordBot {
     }
 
     public void sendToChannel(String sessionId, String message) {
+        if (message == null || message.isEmpty()) return;
         TextChannel channel = sessionToChannel.get(sessionId);
         if (channel != null) channel.createMessage(message).subscribe();
     }
 
     public void sendTransferMessageToChannel(String sessionId, String from, String to) {
-        sendToChannel(sessionId, configManager.getMessages().node("support", "discord", "transfer-message").getString().replace("{fromStaff}", from).replace("{toStaff}", to));
+        String msg = configManager.getMessages().node("support", "discord", "transfer-message")
+                .getString("This ticket has been transferred from {fromStaff} to {toStaff}.");
+        sendToChannel(sessionId, msg.replace("{fromStaff}", from).replace("{toStaff}", to));
     }
 
     public void sendStatusMessageToChannel(String sessionId, String status) {
-        sendToChannel(sessionId, configManager.getMessages().node("support", "discord", "status-message").getString().replace("{status}", status));
+        String msg = configManager.getMessages().node("support", "discord", "status-message")
+                .getString("Player status: {status}");
+        sendToChannel(sessionId, msg.replace("{status}", status));
     }
 
     public void closeSupportChannel(String sessionId, String language, String playerName, Instant createdAt) {
@@ -441,15 +448,20 @@ public class DiscordBot {
         }
     }
 
-    public void sendBugReport(String playerName, String serverName, String title, String message) {
+    public boolean sendBugReport(String playerName, String serverName, String title, String message) {
         if (client == null) {
             plugin.getLogger().warn("Discord bot not connected, cannot send bug report.");
-            return;
+            return false;
         }
 
         ConfigurationNode discordNode = configManager.getConfig().node("support");
-        String bugChannelId = discordNode.node("bug-channel-id").getString("000000000000000000");
+        String bugChannelId = discordNode.node("bug-channel-id").getString("");
         String tagId = discordNode.node("bug-tag-id").getString("");
+
+        if (bugChannelId == null || bugChannelId.isEmpty() || bugChannelId.equals("YOUR_BUG_REPORT_CHANNEL_ID_HERE")) {
+            plugin.getLogger().error("bug-channel-id is not configured in config.yml. Cannot send bug report.");
+            return false;
+        }
 
         try {
             String timeStr = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
@@ -457,7 +469,6 @@ public class DiscordBot {
 
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
-            // Build embed as JSON
             com.fasterxml.jackson.databind.node.ObjectNode embedNode = mapper.createObjectNode();
             embedNode.put("color", 0xFFA500);
             embedNode.put("title", "Bug Report: " + title);
@@ -467,14 +478,9 @@ public class DiscordBot {
             fieldsArray.add(mapper.createObjectNode().put("name", "Time").put("value", timeStr).put("inline", true));
             fieldsArray.add(mapper.createObjectNode().put("name", "Description").put("value", message).put("inline", false));
 
-            // Build message payload
             com.fasterxml.jackson.databind.node.ObjectNode msgNode = mapper.createObjectNode();
-            if (tagId != null && !tagId.isEmpty()) {
-                msgNode.put("content", "<@&" + tagId + ">");
-            }
             msgNode.putArray("embeds").add(embedNode);
 
-            // Build thread creation request body
             String threadName = "Bug: " + title.substring(0, Math.min(title.length(), 90));
             com.fasterxml.jackson.databind.node.ObjectNode bodyNode = mapper.createObjectNode();
             bodyNode.put("name", threadName);
@@ -495,15 +501,24 @@ public class DiscordBot {
 
             java.net.http.HttpResponse<String> response = httpClient.send(
                     httpRequest, java.net.http.HttpResponse.BodyHandlers.ofString());
+
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                plugin.getLogger().error("Failed to send bug report. Status: {}, Body: {}",
-                        response.statusCode(), response.body());
-                return;
+                if (response.statusCode() == 400 && response.body().contains("40067")) {
+                    plugin.getLogger().error(
+                            "Bug report failed: the bug channel is a forum channel that requires a tag. " +
+                            "Please set 'bug-tag-id' in config.yml to a valid forum tag ID.");
+                } else {
+                    plugin.getLogger().error("Failed to send bug report. Status: {}, Body: {}",
+                            response.statusCode(), response.body());
+                }
+                return false;
             }
 
             plugin.getLogger().info("Bug report sent from {} on {}: {}", playerName, serverName, title);
+            return true;
         } catch (Exception e) {
             plugin.getLogger().error("Failed to send bug report.", e);
+            return false;
         }
     }
 

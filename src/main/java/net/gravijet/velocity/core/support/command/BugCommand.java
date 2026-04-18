@@ -56,12 +56,19 @@ public class BugCommand implements SimpleCommand {
                 .map(s -> s.getServerInfo().getName())
                 .orElse("Unknown");
 
-        plugin.getDiscordBot().sendBugReport(player.getUsername(), serverName, title, message);
-
-        CompatibilityHelper.sendMessage(player,
-                CompatibilityHelper.colorize(msg("bug.report-sent"), "title", title));
-
-        plugin.getLogger().info("Bug report from {}: {} - {}", player.getUsername(), title, message);
+        plugin.getServer().getScheduler()
+                .buildTask(plugin.getCorePlugin(), () -> {
+                    boolean success = plugin.getDiscordBot().sendBugReport(player.getUsername(), serverName, title, message);
+                    if (success) {
+                        CompatibilityHelper.sendMessage(player,
+                                CompatibilityHelper.colorize(msg("bug.report-sent"), "title", title));
+                        plugin.getLogger().info("Bug report from {}: {} - {}", player.getUsername(), title, message);
+                    } else {
+                        CompatibilityHelper.sendMessage(player,
+                                CompatibilityHelper.colorize(msg("bug.report-failed")));
+                    }
+                })
+                .schedule();
     }
 
     private String msg(String path) {

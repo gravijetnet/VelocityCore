@@ -16,7 +16,7 @@ public class HosterCommand implements SimpleCommand {
     public void execute(Invocation invocation) {
         String text = configManager.getMessages()
                 .node("hoster", "message")
-                .getString("&cexample.invalid &fis powered by &cIndex-Hosting.com&f.\n &7Get 10% off with code &5GRAVI&f.");
+                .getString("<red>example.invalid <white>is powered by <red>Index-Hosting.com<white>.\n <gray>Get 10% off with code <dark_purple>GRAVI<white>.");
         for (String line : text.split("\n")) {
             CompatibilityHelper.sendMessage(invocation.source(), CompatibilityHelper.colorize(line));
         }

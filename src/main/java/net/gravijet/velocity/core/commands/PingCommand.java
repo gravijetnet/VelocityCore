@@ -42,7 +42,7 @@ public class PingCommand implements SimpleCommand {
 
     private void sendPing(CommandSource source, Player target) {
         long ping = target.getPing();
-        String color = ping <= 70 ? "&a" : ping <= 200 ? "&e" : "&c";
+        String color = ping <= 70 ? "<green>" : ping <= 200 ? "<yellow>" : "<red>";
 
         boolean isSelf = source.equals(target);
         String key = isSelf ? "ping.self" : "ping.other";

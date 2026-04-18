@@ -8,7 +8,6 @@ import net.gravijet.velocity.core.Main;
 import net.gravijet.velocity.core.database.models.PlayerData;
 import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
-import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.sound.Sound;
 import net.kyori.adventure.text.Component;
@@ -69,7 +68,7 @@ public class JoinMeManager {
                     return true;
                 }
                 CompatibilityHelper.sendMessage(player,
-                        CompatibilityHelper.colorize("&cCould not use your token. Please try again."));
+                        CompatibilityHelper.colorize("<red>Could not use your token. Please try again."));
                 return false;
             });
         });
@@ -89,7 +88,7 @@ public class JoinMeManager {
 
     private Component buildBroadcast(Player player, String serverName, boolean isAdmin) {
         String template = configManager.getMessages().node("joinme", "broadcast").getString(
-                "&cJoinMe &8\u00bb &f{player} &fwants you to join! &7(click)");
+                "<red>JoinMe <dark_gray>» <white>{player} <white>wants you to join! <gray>(click)");
         Component parsedMessage = CompatibilityHelper.colorize(template, "player", player.getUsername());
         return parsedMessage.clickEvent(ClickEvent.runCommand("/server " + serverName));
     }

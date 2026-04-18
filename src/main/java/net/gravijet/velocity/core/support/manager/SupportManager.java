@@ -139,7 +139,7 @@ public class SupportManager {
         }
         String banMsg = getBanMessage(player.getUniqueId(), lang);
         if (banMsg != null) {
-            CompatibilityHelper.sendMessage(player, Component.text(banMsg));
+            CompatibilityHelper.sendMessage(player, CompatibilityHelper.colorize(banMsg));
             return false;
         }
         if (playerToSession.containsKey(player.getUniqueId())) {
@@ -427,7 +427,7 @@ public class SupportManager {
         CompatibilityHelper.sendMessage(player, getMessage("support.rating-received", "rating", String.valueOf(rating)));
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff ->
-                CompatibilityHelper.sendMessage(staff, CompatibilityHelper.colorize("&7" + player.getUsername() + " rated this session &f" + rating + "/5&7.")));
+                CompatibilityHelper.sendMessage(staff, CompatibilityHelper.colorize("<gray>" + player.getUsername() + " rated this session <white>" + rating + "/5<gray>.")));
 
         if (plugin.getDiscordBot() != null) {
             plugin.getDiscordBot().sendRatingEmbedToChannel(session.getSessionId().toString(), rating, player.getUsername(), staffName);
@@ -482,7 +482,7 @@ public class SupportManager {
             return null;
         }
         String timeLeft = ban.getDuration() == Long.MAX_VALUE ? "permanent" : DurationUtil.format(ban.getRemainingMillis());
-        return configManager.getMessages().node("support", "you-are-banned").getString("&cYou are banned from the support system. Remaining: &f{duration}&c.").replace("{duration}", timeLeft);
+        return configManager.getMessages().node("support", "you-are-banned").getString("<red>You are banned from the support system. Remaining: <white>{duration}<red>.").replace("{duration}", timeLeft);
     }
 
     private Component getMessage(String path, String... pairs) {

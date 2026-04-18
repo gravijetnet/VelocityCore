@@ -16,18 +16,18 @@ public class ReloadCommand implements SimpleCommand {
     public void execute(Invocation invocation) {
         if (!invocation.source().hasPermission("velocitycore.admin")) {
             CompatibilityHelper.sendMessage(invocation.source(),
-                    CompatibilityHelper.colorize("&cYou don't have permission to use this command."));
+                    CompatibilityHelper.colorize("<red>You don't have permission to use this command."));
             return;
         }
 
         try {
             plugin.reload();
             String success = plugin.getConfigManager().getMessages()
-                    .node("reload", "success").getString("&aConfiguration reloaded.");
+                    .node("reload", "success").getString("<green>Configuration reloaded.");
             CompatibilityHelper.sendMessage(invocation.source(), CompatibilityHelper.colorize(success));
         } catch (Exception e) {
             String failure = plugin.getConfigManager().getMessages()
-                    .node("reload", "failure").getString("&cFailed to reload configuration.");
+                    .node("reload", "failure").getString("<red>Failed to reload configuration.");
             CompatibilityHelper.sendMessage(invocation.source(), CompatibilityHelper.colorize(failure));
         }
     }

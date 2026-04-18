@@ -48,28 +48,28 @@ public class AdminJoinMeCommand implements SimpleCommand {
         switch (args[0].toLowerCase()) {
             case "tokens" -> {
                 if (args.length < 2) {
-                    send(source, "&cUsage: &f/adminjoinme tokens <player>");
+                    send(source, "<red>Usage: <white>/adminjoinme tokens <player>");
                     return;
                 }
                 handleTokens(source, args[1]);
             }
             case "forcejoinme" -> {
                 if (args.length < 2) {
-                    send(source, "&cUsage: &f/adminjoinme forcejoinme <player>");
+                    send(source, "<red>Usage: <white>/adminjoinme forcejoinme <player>");
                     return;
                 }
                 handleForceJoinMe(source, args[1]);
             }
             case "addtokens" -> {
                 if (args.length < 3) {
-                    send(source, "&cUsage: &f/adminjoinme addtokens <player> <amount>");
+                    send(source, "<red>Usage: <white>/adminjoinme addtokens <player> <amount>");
                     return;
                 }
                 handleAddTokens(source, args[1], args[2]);
             }
             case "removetokens" -> {
                 if (args.length < 3) {
-                    send(source, "&cUsage: &f/adminjoinme removetokens <player> <amount>");
+                    send(source, "<red>Usage: <white>/adminjoinme removetokens <player> <amount>");
                     return;
                 }
                 handleRemoveTokens(source, args[1], args[2]);
@@ -169,9 +169,9 @@ public class AdminJoinMeCommand implements SimpleCommand {
         CompatibilityHelper.sendMessage(player, CompatibilityHelper.colorize(msg(path), pairs));
     }
 
-    // For sending raw strings (usage lines)
+    // For sending raw strings (usage lines) or message keys
     private void send(CommandSource source, String rawOrPath) {
-        String text = rawOrPath.startsWith("&") ? rawOrPath : msg(rawOrPath);
+        String text = (rawOrPath.startsWith("&") || rawOrPath.startsWith("<")) ? rawOrPath : msg(rawOrPath);
         CompatibilityHelper.sendMessage(source, CompatibilityHelper.colorize(text));
     }
 
