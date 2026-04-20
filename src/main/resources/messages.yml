@@ -25,7 +25,7 @@ find:
   offline: "<red>VelocityCore <dark_gray>» <red>{player} <white>was last seen on <red>{server} <white>at <red>{time}<white>."
 
 hoster:
-  message: "<white>Powered by <red>Index-Hosting.com<white>.\n <gray>Get 10% off with code <dark_purple>GRAVI<white>."
+  message: "<white>Powered by <red>Index-Hosting.com<white>.\n<gray>Get 10% off with code <dark_purple>GRAVI<white>."
 
 joinme:
   no-perm: "<red>VelocityCore <dark_gray>» <white>You don't have permission to use JoinMe."
