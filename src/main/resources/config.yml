@@ -1,12 +1,5 @@
 # Main configuration for VelocityCore
 
-# Discord Bot settings
-discord-bot:
-  enabled: true
-  token: "YOUR_DISCORD_BOT_TOKEN"
-  status: "with the GraviJet Network"
-  bug-report-channel: "YOUR_BUG_REPORT_CHANNEL_ID"
-
 # Database settings
 database:
   host: "localhost"
@@ -37,7 +30,8 @@ support:
   enabled: true
   discord:
     enabled: true
-    bot-token: "YOUR_DISCORD_BOT_TOKEN_HERE"
+    bot-token: "YOUR_DISCORD_BOT_TOKEN"
+    status: "with the GraviJet Network"
     guild-id: "YOUR_DISCORD_GUILD_ID_HERE"
     support-category-id: "YOUR_DISCORD_SUPPORT_CATEGORY_ID_HERE"
     transcript-channel-id: "YOUR_DISCORD_TRANSCRIPT_CHANNEL_ID_HERE"

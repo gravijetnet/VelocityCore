@@ -118,7 +118,7 @@ support:
   invalid-command: "<red>VelocityCore <dark_gray>» <white>Unknown subcommand. Use <red>/support help <white>for a list of commands."
   player-help:
     - "<red>VelocityCore <dark_gray>- <white>Support"
-    - "<red>● /support de <dark_gray>» <white>Ticket auf Deutsch öffnen."
+    - "<red>● /support de <dark_gray>» <white>Open a ticket in German."
     - "<red>● /support en <dark_gray>» <white>Open a ticket in English."
     - "<red>● /support chat <white>(message) <dark_gray>» <white>Send a message in your ticket."
     - "<red>● /support rate <white>(1-5) <dark_gray>» <white>Rate your closed ticket."
