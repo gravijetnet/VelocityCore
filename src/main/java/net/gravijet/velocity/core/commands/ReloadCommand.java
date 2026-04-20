@@ -15,8 +15,6 @@ public class ReloadCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         if (!invocation.source().hasPermission("velocitycore.admin")) {
-            CompatibilityHelper.sendMessage(invocation.source(),
-                    CompatibilityHelper.colorize("<red>You don't have permission to use this command."));
             return;
         }
 
