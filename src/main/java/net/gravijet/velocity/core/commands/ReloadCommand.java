@@ -4,6 +4,8 @@ import com.velocitypowered.api.command.SimpleCommand;
 import net.gravijet.velocity.core.Main;
 import net.gravijet.velocity.core.util.CompatibilityHelper;
 
+import java.util.List;
+
 public class ReloadCommand implements SimpleCommand {
 
     private final Main plugin;
@@ -28,5 +30,11 @@ public class ReloadCommand implements SimpleCommand {
                     .node("reload", "failure").getString("<red>Failed to reload configuration.");
             CompatibilityHelper.sendMessage(invocation.source(), CompatibilityHelper.colorize(failure));
         }
+    }
+
+    @Override
+    public List<String> suggest(Invocation invocation) {
+        if (!hasPermission(invocation)) return List.of();
+        return List.of("vcore", "velocitycore");
     }
 }

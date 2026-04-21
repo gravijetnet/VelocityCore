@@ -31,7 +31,7 @@ support:
   discord:
     enabled: true
     bot-token: "YOUR_DISCORD_BOT_TOKEN"
-    status: "with the GraviJet Network"
+    status: "example.invalid"
     guild-id: "YOUR_DISCORD_GUILD_ID_HERE"
     support-category-id: "YOUR_DISCORD_SUPPORT_CATEGORY_ID_HERE"
     transcript-channel-id: "YOUR_DISCORD_TRANSCRIPT_CHANNEL_ID_HERE"
