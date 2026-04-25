@@ -5,8 +5,8 @@ database:
   host: "localhost"
   port: 3306
   database: "velocity"
-  username: "user"
-  password: "password"
+  username: "velocity"
+  password: "velocity"
 
 # JoinMe settings
 joinme:
@@ -21,9 +21,8 @@ advertising:
   enabled: true
   interval_minutes: 5
   messages:
-    - "<gold>Welcome to the GraviJet Network!"
-    - "<white>Check out our website: <red>example.invalid"
-    - "<yellow>Don't forget to vote for rewards!"
+    - "\n<white>Check out our website: <red>example.invalid\n"
+    - "\n<yellow>Don't forget to /vote for rewards!\n"
 
 # Support system settings
 support:

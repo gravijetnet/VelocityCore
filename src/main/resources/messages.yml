@@ -5,30 +5,30 @@
 prefix: "<red>VelocityCore <dark_gray>» <white>"
 
 general:
-  no-permission: "<red>VelocityCore <dark_gray>» <white>You don't have permission to use this command."
-  players-only: "<red>VelocityCore <dark_gray>» <white>This command can only be used by players."
-  player-not-found: "<red>VelocityCore <dark_gray>» <white>Player <red>{player} <white>was not found."
-  invalid-amount: "<red>VelocityCore <dark_gray>» <white>Invalid amount specified."
+  no-permission: "<white>You don't have permission to use this command."
+  players-only: "This command can only be used by players."
+  player-not-found: "Player <red>{player} <white>was not found."
+  invalid-amount: "Invalid amount specified."
 
 reload:
-  success: "<red>VelocityCore <dark_gray>» <white>Configuration reloaded successfully."
-  failure: "<red>VelocityCore <dark_gray>» <white>Failed to reload configuration."
+  success: "Configuration reloaded successfully."
+  failure: "Failed to reload configuration."
 
 ping:
-  console: "<red>VelocityCore <dark_gray>» <white>This command can only be used by players."
-  self: "<red>VelocityCore <dark_gray>» <white>Your ping: {color}{ping}ms"
-  other: "<red>VelocityCore <dark_gray>» <white>Ping of <red>{player}<white>: {color}{ping}ms"
+  console: "This command can only be used by players."
+  self: "Your ping: {color}{ping}ms"
+  other: "Ping of <red>{player}<white>: {color}{ping}ms"
 
 find:
-  usage: "<red>VelocityCore <dark_gray>» <white>Usage: <red>/find (player)"
-  online: "<red>VelocityCore <dark_gray>» <red>{player} <white>is currently on <red>{server}<white>."
-  offline: "<red>VelocityCore <dark_gray>» <red>{player} <white>was last seen on <red>{server} <white>at <red>{time}<white>."
+  usage: "Usage: <red>/find (player)"
+  online: "<red>{player} <white>is currently on <red>{server}<white>."
+  offline: "<red>{player} <white>was last seen on <red>{server} <white>at <red>{time}<white>."
 
 hoster:
   message: "<white>Powered by <red>Index-Hosting.com<white>.\n<gray>Get 10% off with code <dark_purple>GRAVI<white>."
 
 joinme:
-  no-perm: "<red>VelocityCore <dark_gray>» <white>You don't have permission to use JoinMe."
+  no-perm: "You don't have permission to use JoinMe."
   status_format: |-
     <red>VelocityCore <dark_gray>- <white>JoinMe Tokens
     <red>● Status     <dark_gray>» <white>{status}
@@ -36,17 +36,17 @@ joinme:
     <red>● Monthly    <dark_gray>» <white>{monthly} <gray>(resets monthly)
     <red>● Permanent  <dark_gray>» <white>{permanent} <gray>(never expires)
     <red>● Cooldown   <dark_gray>» <white>{cooldown}
-  on_cooldown: "<red>VelocityCore <dark_gray>» <white>You are on cooldown for another <red>{cooldown} <white>seconds."
-  no_tokens: "<red>VelocityCore <dark_gray>» <white>You don't have enough JoinMe tokens."
-  broadcast: "<red>JoinMe <dark_gray>» {color}{player} <white>wants you to join! <gray>(click to join)"
+  on_cooldown: "You are on cooldown for another <red>{cooldown} <white>seconds."
+  no_tokens: "You don't have enough JoinMe tokens."
+  broadcast: "<gray><bold><st>--------------</st><white>JOINME<gray><st>-------------</bold>\n{color}{player} <gray>is playing on {color}{server}\n<red>Join server\n<gray><bold><st>---------------------------------</st>"
 
 joinme-color:
-  usage: "<red>VelocityCore <dark_gray>» <white>Usage: <red>/joinmecolor (color) <white>or <red>/joinmecolor reset"
-  reset: "<red>VelocityCore <dark_gray>» <white>Your JoinMe color has been reset to default."
-  set: "<red>VelocityCore <dark_gray>» <white>Your JoinMe color has been updated."
+  usage: "Usage: <red>/joinmecolor (color) <white>or <red>/joinmecolor reset"
+  reset: "Your JoinMe color has been reset to default."
+  set: "Your JoinMe color has been updated."
 
 tokens:
-  error: "<red>VelocityCore <dark_gray>» <white>Could not retrieve your token data."
+  error: "Could not retrieve your token data."
   status:
     unlimited: "<green>Unlimited"
     available: "<green>Available"
@@ -61,7 +61,7 @@ tokens:
     <red>● Monthly    <dark_gray>» <white>{monthly} <gray>(resets monthly)
     <red>● Permanent  <dark_gray>» <white>{permanent} <gray>(never expires)
     <red>● Cooldown   <dark_gray>» <white>{cooldown}
-  store-link: "<red>VelocityCore <dark_gray>» <white>Buy more tokens at <red>example.invalid<white>."
+  store-link: "Buy more tokens at <red>example.invalid<white>."
 
 admin-joinme:
   help:
@@ -70,52 +70,52 @@ admin-joinme:
     - "<red>● /ajm forcejoinme <white>(player) <dark_gray>» <white>Force a JoinMe for a player."
     - "<red>● /ajm addtokens <white>(player) (amount) <dark_gray>» <white>Add permanent tokens."
     - "<red>● /ajm removetokens <white>(player) (amount) <dark_gray>» <white>Remove permanent tokens."
-  tokens-header: "<red>VelocityCore <dark_gray>» <white>Tokens for <red>{player}"
-  tokens-error: "<red>VelocityCore <dark_gray>» <white>Could not retrieve token data for that player."
-  force-success: "<red>VelocityCore <dark_gray>» <white>Successfully forced a JoinMe for <red>{player}<white>."
-  force-received: "<red>VelocityCore <dark_gray>» <white>An admin has activated a JoinMe for you."
-  add-success: "<red>VelocityCore <dark_gray>» <white>Added <red>{amount} <white>permanent tokens to <red>{player}<white>."
-  add-received: "<red>VelocityCore <dark_gray>» <white>An admin has given you <red>{amount} <white>permanent tokens."
-  add-failed: "<red>VelocityCore <dark_gray>» <white>Failed to add tokens."
-  remove-success: "<red>VelocityCore <dark_gray>» <white>Removed <red>{amount} <white>permanent tokens from <red>{player}<white>."
-  remove-received: "<red>VelocityCore <dark_gray>» <white>An admin has removed <red>{amount} <white>permanent tokens from you."
-  remove-failed: "<red>VelocityCore <dark_gray>» <white>Failed to remove tokens."
+  tokens-header: "Tokens for <red>{player}"
+  tokens-error: "Could not retrieve token data for that player."
+  force-success: "Successfully forced a JoinMe for <red>{player}<white>."
+  force-received: "An admin has activated a JoinMe for you."
+  add-success: "Added <red>{amount} <white>permanent tokens to <red>{player}<white>."
+  add-received: "An admin has given you <red>{amount} <white>permanent tokens."
+  add-failed: "Failed to add tokens."
+  remove-success: "Removed <red>{amount} <white>permanent tokens from <red>{player}<white>."
+  remove-received: "An admin has removed <red>{amount} <white>permanent tokens from you."
+  remove-failed: "Failed to remove tokens."
 
 support:
-  chat-usage: "<red>VelocityCore <dark_gray>» <white>Usage: <red>/spc (message)"
-  ticket-created: "<red>VelocityCore <dark_gray>» <white>Your support ticket has been created. A staff member will be with you shortly."
-  ticket-closed: "<red>VelocityCore <dark_gray>» <white>Your support ticket has been closed."
-  ticket-closed-staff: "<red>VelocityCore <dark_gray>» <white>Support ticket for <red>{player} <white>has been closed."
-  ticket-auto-closed: "<red>VelocityCore <dark_gray>» <white>Your support ticket was closed due to inactivity."
-  ticket-cooldown: "<red>VelocityCore <dark_gray>» <white>Please wait <red>{cooldown} <white>minutes before opening another ticket."
-  max-tickets: "<red>VelocityCore <dark_gray>» <white>You have reached the maximum number of open tickets <red>({max})<white>."
-  no-open-ticket: "<red>VelocityCore <dark_gray>» <white>You don't have an open support ticket."
+  chat-usage: "Usage: <red>/spc (message)"
+  ticket-created: "Your support ticket has been created. A staff member will be with you shortly."
+  ticket-closed: "Your support ticket has been closed."
+  ticket-closed-staff: "Support ticket for <red>{player} <white>has been closed."
+  ticket-auto-closed: "Your support ticket was closed due to inactivity."
+  ticket-cooldown: "Please wait <red>{cooldown} <white>minutes before opening another ticket."
+  max-tickets: "You have reached the maximum number of open tickets <red>({max})<white>."
+  no-open-ticket: "You don't have an open support ticket."
   staff-notification: "<red>Support <dark_gray>» <white>New ticket from <red>{player} <white>on <red>{server} <gray>— click to claim"
   staff-chat-format: "<red>[Support] <red>{player}<dark_gray>: <white>{message}"
-  staff-enter: "<red>VelocityCore <dark_gray>» <white>You have entered support chat."
-  staff-leave: "<red>VelocityCore <dark_gray>» <white>You have left support chat."
-  staff-cannot-request: "<red>VelocityCore <dark_gray>» <white>Staff members cannot create support tickets."
-  already-in-session: "<red>VelocityCore <dark_gray>» <white>You already have an open support ticket."
-  no-active-session-for-player: "<red>VelocityCore <dark_gray>» <white>No active session found for <red>{player}<white>."
-  already-handling-session: "<red>VelocityCore <dark_gray>» <white>You are already handling a support session."
-  already-claimed: "<red>VelocityCore <dark_gray>» <white>This ticket has already been claimed by <red>{staff}<white>."
-  claimed-by-you: "<red>VelocityCore <dark_gray>» <white>You have claimed the support ticket for <red>{player}<white>."
-  claimed-by-staff: "<red>VelocityCore <dark_gray>» <red>{staff} <white>has claimed your support ticket."
-  invalid-rating: "<red>VelocityCore <dark_gray>» <white>Invalid rating. Please enter a number between 1 and 5."
-  not-session-player: "<red>VelocityCore <dark_gray>» <white>You don't have a recently closed session to rate."
-  already-rated: "<red>VelocityCore <dark_gray>» <white>You have already rated this support session."
-  rating-expired: "<red>VelocityCore <dark_gray>» <white>The time to rate this session has expired."
-  rating-received: "<red>VelocityCore <dark_gray>» <white>Thank you for your rating of <red>{rating}/5<white>."
-  rating-prompt: "<red>VelocityCore <dark_gray>» <white>Rate your support experience: <red>/support rate (1-5)"
-  player-online-status: "<red>VelocityCore <dark_gray>» <red>{player} <white>is now online."
-  player-offline-status: "<red>VelocityCore <dark_gray>» <red>{player} <white>has gone offline."
-  you-are-banned: "<red>VelocityCore <dark_gray>» <white>You are banned from the support system. Remaining: <red>{duration}<white>."
-  player-banned: "<red>VelocityCore <dark_gray>» <white>You have banned <red>{player} <white>from the support system for <red>{duration}<white>."
-  you-are-unbanned: "<red>VelocityCore <dark_gray>» <white>You have been unbanned from the support system."
-  player-unbanned: "<red>VelocityCore <dark_gray>» <white>You have unbanned <red>{player}<white>."
-  not-banned: "<red>VelocityCore <dark_gray>» <red>{player} <white>is not banned from the support system."
-  invalid-duration: "<red>VelocityCore <dark_gray>» <white>Invalid duration format. Use <red>1d<white>, <red>2h<white>, <red>30m<white>, etc."
-  invalid-command: "<red>VelocityCore <dark_gray>» <white>Unknown subcommand. Use <red>/support help <white>for a list of commands."
+  staff-enter: "You have entered support chat."
+  staff-leave: "You have left support chat."
+  staff-cannot-request: "Staff members cannot create support tickets."
+  already-in-session: "You already have an open support ticket."
+  no-active-session-for-player: "No active session found for <red>{player}<white>."
+  already-handling-session: "You are already handling a support session."
+  already-claimed: "This ticket has already been claimed by <red>{staff}<white>."
+  claimed-by-you: "You have claimed the support ticket for <red>{player}<white>."
+  claimed-by-staff: "<<red>{staff} <white>has claimed your support ticket."
+  invalid-rating: "Invalid rating. Please enter a number between 1 and 5."
+  not-session-player: "You don't have a recently closed session to rate."
+  already-rated: "You have already rated this support session."
+  rating-expired: "The time to rate this session has expired."
+  rating-received: "Thank you for your rating of <red>{rating}/5<white>."
+  rating-prompt: "Rate your support experience: <red>/support rate (1-5)"
+  player-online-status: "<red>{player} <white>is now online."
+  player-offline-status: "<red>{player} <white>has gone offline."
+  you-are-banned: "You are banned from the support system. Remaining: <red>{duration}<white>."
+  player-banned: "You have banned <red>{player} <white>from the support system for <red>{duration}<white>."
+  you-are-unbanned: "You have been unbanned from the support system."
+  player-unbanned: "You have unbanned <red>{player}<white>."
+  not-banned: "<red>{player} <white>is not banned from the support system."
+  invalid-duration: "Invalid duration format. Use <red>1d<white>, <red>2h<white>, <red>30m<white>, etc."
+  invalid-command: "Unknown subcommand. Use <red>/support help <white>for a list of commands."
   player-help:
     - "<red>VelocityCore <dark_gray>- <white>Support"
     - "<red>● /support de <dark_gray>» <white>Open a ticket in German."
@@ -144,9 +144,9 @@ support:
     rating-title: "New Rating"
 
 bug:
-  usage: "<red>VelocityCore <dark_gray>» <white>Usage: <red>/bug (title) (description)"
-  title-too-long: "<red>VelocityCore <dark_gray>» <white>Title is too long. Maximum 100 characters."
-  message-too-long: "<red>VelocityCore <dark_gray>» <white>Description is too long. Maximum 1000 characters."
-  discord-not-available: "<red>VelocityCore <dark_gray>» <white>Bug reporting is currently unavailable. Please try again later."
-  report-sent: "<red>VelocityCore <dark_gray>» <white>Your bug report <red>\"{title}\" <white>has been submitted. Thank you!"
-  report-failed: "<red>VelocityCore <dark_gray>» <white>Failed to send your bug report. Please try again later."
+  usage: "Usage: <red>/bug (title) (description)"
+  title-too-long: "Title is too long. Maximum 100 characters."
+  message-too-long: "Description is too long. Maximum 1000 characters."
+  discord-not-available: "Bug reporting is currently unavailable. Please try again later."
+  report-sent: "Your bug report <red>\"{title}\" <white>has been submitted. Thank you!"
+  report-failed: "Failed to send your bug report. Please try again later."

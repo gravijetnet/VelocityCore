@@ -91,8 +91,46 @@ public class JoinMeManager {
                 "<red>JoinMe <dark_gray>» {color}{player} <white>wants you to join! <gray>(click)");
         String color = getPlayerColorPreference(player.getUniqueId());
         if (color == null) color = "<white>";
-        Component parsedMessage = CompatibilityHelper.colorize(template, "color", color, "player", player.getUsername());
+
+        // Replace placeholders before parsing so centering sees the real text lengths
+        String filled = template
+                .replace("{color}", color)
+                .replace("{player}", player.getUsername())
+                .replace("{server}", serverName);
+
+        String[] lines = filled.split("\\n", -1);
+        if (lines.length >= 3) {
+            lines[1] = centerMinecraftLine(lines[1]);
+            lines[2] = centerMinecraftLine(lines[2]);
+        }
+
+        Component parsedMessage = CompatibilityHelper.colorize(String.join("\n", lines));
         return parsedMessage.clickEvent(ClickEvent.runCommand("/server " + serverName));
+    }
+
+    private static final int CHAT_WIDTH = 320;
+
+    private static int charWidth(char c) {
+        return switch (c) {
+            case '!', ',', '.', ':', ';', '|' -> 2;
+            case '\'', '`', 'i', 'l' -> 3;
+            case 'j', 't', ' ' -> 4;
+            case 'f', 'k', 'r', '(', ')', '"', '<', '>' -> 5;
+            default -> 6;
+        };
+    }
+
+    private static int plainTextWidth(String text) {
+        if (text.isEmpty()) return 0;
+        int w = 0;
+        for (char c : text.toCharArray()) w += charWidth(c) + 1;
+        return w - 1;
+    }
+
+    private static String centerMinecraftLine(String miniMessage) {
+        String plain = miniMessage.replaceAll("<[^>]+>", "");
+        int spaces = Math.max(0, (CHAT_WIDTH - plainTextWidth(plain)) / 2 / 5);
+        return " ".repeat(spaces) + miniMessage;
     }
 
 

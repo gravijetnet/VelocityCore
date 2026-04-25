@@ -4,6 +4,7 @@ import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
+import net.gravijet.velocity.core.database.PlayerDataDAO;
 import net.gravijet.velocity.core.managers.JoinMeManager;
 import net.gravijet.velocity.core.managers.TokenManager;
 import net.gravijet.velocity.core.util.CompatibilityHelper;
@@ -22,12 +23,14 @@ public class AdminJoinMeCommand implements SimpleCommand {
     private final TokenManager tokenManager;
     private final JoinMeManager joinMeManager;
     private final ConfigManager configManager;
+    private final PlayerDataDAO playerDataDAO;
 
-    public AdminJoinMeCommand(ProxyServer proxy, TokenManager tokenManager, JoinMeManager joinMeManager, ConfigManager configManager) {
+    public AdminJoinMeCommand(ProxyServer proxy, TokenManager tokenManager, JoinMeManager joinMeManager, ConfigManager configManager, PlayerDataDAO playerDataDAO) {
         this.proxy = proxy;
         this.tokenManager = tokenManager;
         this.joinMeManager = joinMeManager;
         this.configManager = configManager;
+        this.playerDataDAO = playerDataDAO;
     }
 
     @Override
@@ -79,16 +82,16 @@ public class AdminJoinMeCommand implements SimpleCommand {
     }
 
     private void handleTokens(CommandSource source, String playerName) {
-        proxy.getPlayer(playerName).ifPresentOrElse(player -> {
-            tokenManager.getPlayerData(player.getUniqueId()).thenAccept(data -> {
+        Player onlinePlayer = proxy.getPlayer(playerName).orElse(null);
+        if (onlinePlayer != null) {
+            tokenManager.getPlayerData(onlinePlayer.getUniqueId()).thenAccept(data -> {
                 if (data == null) {
                     send(source, "admin-joinme.tokens-error");
                     return;
                 }
-                long cooldownSeconds = joinMeManager.getCooldown(player.getUniqueId());
+                long cooldownSeconds = joinMeManager.getCooldown(onlinePlayer.getUniqueId());
                 String cooldownFormatted = cooldownSeconds > 0 ? formatDuration(cooldownSeconds) : msg("tokens.cooldown.ready");
                 String status = cooldownSeconds > 0 ? msg("tokens.status.empty") : msg("tokens.status.available");
-
                 CompatibilityHelper.sendMessage(source, CompatibilityHelper.colorize(
                         msg("joinme.status_format"),
                         "status", status,
@@ -98,8 +101,30 @@ public class AdminJoinMeCommand implements SimpleCommand {
                         "cooldown", cooldownFormatted
                 ));
             });
-        }, () -> CompatibilityHelper.sendMessage(source, CompatibilityHelper.colorize(
-                msg("general.player-not-found"), "player", playerName)));
+        } else {
+            playerDataDAO.getPlayerDataByName(playerName).thenAccept(offlineData -> {
+                if (offlineData == null) {
+                    send(source, "general.player-not-found", "player", playerName);
+                    return;
+                }
+                tokenManager.getPlayerData(offlineData.getUuid()).thenAccept(data -> {
+                    if (data == null) {
+                        send(source, "admin-joinme.tokens-error");
+                        return;
+                    }
+                    String cooldownFormatted = msg("tokens.cooldown.ready");
+                    String status = data.getTotalTokens() > 0 ? msg("tokens.status.available") : msg("tokens.status.empty");
+                    CompatibilityHelper.sendMessage(source, CompatibilityHelper.colorize(
+                            msg("joinme.status_format"),
+                            "status", status,
+                            "total", String.valueOf(data.getTotalTokens()),
+                            "monthly", String.valueOf(data.getMonthlyTokens()),
+                            "permanent", String.valueOf(data.getPermanentTokens()),
+                            "cooldown", cooldownFormatted
+                    ));
+                });
+            });
+        }
     }
 
     private void handleForceJoinMe(CommandSource source, String playerName) {
@@ -117,16 +142,31 @@ public class AdminJoinMeCommand implements SimpleCommand {
                 send(source, "general.invalid-amount");
                 return;
             }
-            proxy.getPlayer(playerName).ifPresentOrElse(player ->
-                    tokenManager.addPermanentTokens(player.getUniqueId(), amount).thenAccept(success -> {
+            Player onlinePlayer = proxy.getPlayer(playerName).orElse(null);
+            if (onlinePlayer != null) {
+                tokenManager.addPermanentTokens(onlinePlayer.getUniqueId(), amount).thenAccept(success -> {
+                    if (success) {
+                        send(source, "admin-joinme.add-success", "amount", String.valueOf(amount), "player", onlinePlayer.getUsername());
+                        send(onlinePlayer, "admin-joinme.add-received", "amount", String.valueOf(amount));
+                    } else {
+                        send(source, "admin-joinme.add-failed");
+                    }
+                });
+            } else {
+                playerDataDAO.getPlayerDataByName(playerName).thenAccept(offlineData -> {
+                    if (offlineData == null) {
+                        send(source, "general.player-not-found", "player", playerName);
+                        return;
+                    }
+                    tokenManager.addPermanentTokens(offlineData.getUuid(), amount).thenAccept(success -> {
                         if (success) {
-                            send(source, "admin-joinme.add-success", "amount", String.valueOf(amount), "player", player.getUsername());
-                            send(player, "admin-joinme.add-received", "amount", String.valueOf(amount));
+                            send(source, "admin-joinme.add-success", "amount", String.valueOf(amount), "player", offlineData.getUsername());
                         } else {
                             send(source, "admin-joinme.add-failed");
                         }
-                    }),
-                    () -> send(source, "general.player-not-found", "player", playerName));
+                    });
+                });
+            }
         } catch (NumberFormatException e) {
             send(source, "general.invalid-amount");
         }
@@ -139,16 +179,31 @@ public class AdminJoinMeCommand implements SimpleCommand {
                 send(source, "general.invalid-amount");
                 return;
             }
-            proxy.getPlayer(playerName).ifPresentOrElse(player ->
-                    tokenManager.removePermanentTokens(player.getUniqueId(), amount).thenAccept(success -> {
+            Player onlinePlayer = proxy.getPlayer(playerName).orElse(null);
+            if (onlinePlayer != null) {
+                tokenManager.removePermanentTokens(onlinePlayer.getUniqueId(), amount).thenAccept(success -> {
+                    if (success) {
+                        send(source, "admin-joinme.remove-success", "amount", String.valueOf(amount), "player", onlinePlayer.getUsername());
+                        send(onlinePlayer, "admin-joinme.remove-received", "amount", String.valueOf(amount));
+                    } else {
+                        send(source, "admin-joinme.remove-failed");
+                    }
+                });
+            } else {
+                playerDataDAO.getPlayerDataByName(playerName).thenAccept(offlineData -> {
+                    if (offlineData == null) {
+                        send(source, "general.player-not-found", "player", playerName);
+                        return;
+                    }
+                    tokenManager.removePermanentTokens(offlineData.getUuid(), amount).thenAccept(success -> {
                         if (success) {
-                            send(source, "admin-joinme.remove-success", "amount", String.valueOf(amount), "player", player.getUsername());
-                            send(player, "admin-joinme.remove-received", "amount", String.valueOf(amount));
+                            send(source, "admin-joinme.remove-success", "amount", String.valueOf(amount), "player", offlineData.getUsername());
                         } else {
                             send(source, "admin-joinme.remove-failed");
                         }
-                    }),
-                    () -> send(source, "general.player-not-found", "player", playerName));
+                    });
+                });
+            }
         } catch (NumberFormatException e) {
             send(source, "general.invalid-amount");
         }
