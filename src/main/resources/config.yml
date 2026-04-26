@@ -12,8 +12,8 @@ database:
 joinme:
   cooldown: 60 # in seconds
   tokens:
-    initial: 5
-    monthly: 2
+    initial: 1
+    monthly: 1
     permanent: 0
 
 # Advertising settings
