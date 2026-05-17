@@ -43,20 +43,22 @@ public class DatabaseManager {
 
     private void initializeDatabase() {
         try (Connection connection = getConnection()) {
-            connection.prepareStatement("CREATE TABLE IF NOT EXISTS player_data (" +
+            try (var ps = connection.prepareStatement("CREATE TABLE IF NOT EXISTS player_data (" +
                     "uuid VARCHAR(100) PRIMARY KEY, " +
                     "username VARCHAR(100), " +
                     "monthly_tokens INT DEFAULT 0, " +
                     "permanent_tokens INT DEFAULT 1, " +
                     "last_reset_month INT DEFAULT 0, " +
                     "color VARCHAR(64) DEFAULT NULL" +
-                    ")").executeUpdate();
+                    ")")) {
+                ps.executeUpdate();
+            }
 
             addColumnIfNotExists(connection, "player_data", "last_server", "VARCHAR(100)");
             addColumnIfNotExists(connection, "player_data", "last_online", "BIGINT");
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            Main.getInstance().getLogger().error("Failed to initialize database tables", e);
             Main.getInstance().shutdown();
         }
     }
@@ -64,12 +66,16 @@ public class DatabaseManager {
     private void addColumnIfNotExists(Connection connection, String tableName, String columnName, String columnDefinition) {
         try {
             DatabaseMetaData md = connection.getMetaData();
-            ResultSet rs = md.getColumns(null, null, tableName, columnName);
-            if (!rs.next()) {
-                connection.prepareStatement("ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + columnDefinition).executeUpdate();
+            try (ResultSet rs = md.getColumns(null, null, tableName, columnName)) {
+                if (!rs.next()) {
+                    try (var ps = connection.prepareStatement(
+                            "ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + columnDefinition)) {
+                        ps.executeUpdate();
+                    }
+                }
             }
         } catch (SQLException e) {
-            // Column already exists or other non-critical error
+            Main.getInstance().getLogger().warn("Could not add column {}.{}: {}", tableName, columnName, e.getMessage());
         }
     }
 

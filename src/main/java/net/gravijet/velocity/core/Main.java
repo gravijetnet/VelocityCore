@@ -63,10 +63,11 @@ public class Main {
 
             // Initialize Managers
             this.configManager = new ConfigManager(proxy, dataDirectory);
-            this.tokenManager = new TokenManager(new DatabaseManager(configManager), proxy);
+            DatabaseManager databaseManager = new DatabaseManager(configManager);
+            this.tokenManager = new TokenManager(databaseManager, proxy);
             this.joinMeManager = new JoinMeManager(this, proxy, tokenManager, configManager);
             this.advertisingManager = new AdvertisingManager(this, proxy, configManager);
-            this.playerDataDAO = new PlayerDataDAO(new DatabaseManager(configManager));
+            this.playerDataDAO = new PlayerDataDAO(databaseManager);
             this.playerLogger = new PlayerLogger(dataDirectory);
 
             // Start Services
@@ -111,6 +112,7 @@ public class Main {
 
     @Subscribe
     public void onServerConnected(ServerConnectedEvent event) {
+        if (playerLogger == null) return;
         Player player = event.getPlayer();
         String ip = player.getRemoteAddress().getAddress().getHostAddress();
         String toServer = event.getServer().getServerInfo().getName();
@@ -127,7 +129,7 @@ public class Main {
     public void onDisconnect(DisconnectEvent event) {
         Player player = event.getPlayer();
 
-        playerDataDAO.getPlayerData(player.getUniqueId()).thenAccept(data -> {
+        if (playerDataDAO != null) playerDataDAO.getPlayerData(player.getUniqueId()).thenAccept(data -> {
             if (data != null) {
                 data.setLastOnline(System.currentTimeMillis());
                 player.getCurrentServer().ifPresent(server -> data.setLastServer(server.getServerInfo().getName()));
@@ -139,7 +141,7 @@ public class Main {
         String lastServer = player.getCurrentServer()
                 .map(s -> s.getServerInfo().getName())
                 .orElse("unknown");
-        playerLogger.logLeave(player.getUsername(), ip, lastServer);
+        if (playerLogger != null) playerLogger.logLeave(player.getUsername(), ip, lastServer);
 
         if (supportPlugin != null) supportPlugin.handlePlayerLeave(player);
     }
@@ -147,8 +149,8 @@ public class Main {
 
 
     public void shutdown() {
+        logger.info("Shutting down...");
         proxy.shutdown();
-        System.out.println("Shutting down...");
     }
 
     public static Main getInstance() {
@@ -157,6 +159,10 @@ public class Main {
 
     public ConfigManager getConfigManager() {
         return configManager;
+    }
+
+    public Logger getLogger() {
+        return logger;
     }
 
     public void reload() {

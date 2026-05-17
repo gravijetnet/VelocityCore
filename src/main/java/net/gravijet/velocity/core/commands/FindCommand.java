@@ -7,14 +7,16 @@ import net.gravijet.velocity.core.util.CompatibilityHelper;
 import net.gravijet.velocity.core.util.ConfigManager;
 import net.gravijet.velocity.core.database.PlayerDataDAO;
 
-import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
 
 public class FindCommand implements SimpleCommand {
 
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter DATE_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault());
 
     private final ProxyServer proxy;
     private final PlayerDataDAO playerDataDAO;
@@ -48,7 +50,7 @@ public class FindCommand implements SimpleCommand {
                     msg("find.online"), "player", player.getUsername(), "server", server));
         }, () -> playerDataDAO.getPlayerDataByName(playerName).thenAccept(data -> {
             if (data != null) {
-                String time = DATE_FORMAT.format(new Date(data.getLastOnline()));
+                String time = DATE_FORMAT.format(Instant.ofEpochMilli(data.getLastOnline()));
                 CompatibilityHelper.sendMessage(invocation.source(), CompatibilityHelper.colorize(
                         msg("find.offline"),
                         "player", data.getUsername(),

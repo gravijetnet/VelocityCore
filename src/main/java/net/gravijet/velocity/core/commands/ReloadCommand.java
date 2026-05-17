@@ -37,4 +37,9 @@ public class ReloadCommand implements SimpleCommand {
         if (!hasPermission(invocation)) return List.of();
         return List.of("vcore", "velocitycore");
     }
+
+    @Override
+    public boolean hasPermission(Invocation invocation) {
+        return invocation.source().hasPermission("velocitycore.admin");
+    }
 }

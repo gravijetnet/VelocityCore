@@ -12,8 +12,8 @@ import java.util.concurrent.CompletableFuture;
 public class TokenManager {
     private final DatabaseManager databaseManager;
     private final ProxyServer proxy;
-    // practical upper bound for permission-based token amounts (server admins can set large numbers)
-    private static final int TOKEN_PERMISSION_UPPER_BOUND = 1000000;
+    // Upper bound for permission-based token amounts. Checked via linear scan, so keep small.
+    private static final int TOKEN_PERMISSION_UPPER_BOUND = 1_000;
 
     public TokenManager(DatabaseManager databaseManager, ProxyServer proxy) {
         this.databaseManager = databaseManager;
@@ -22,28 +22,27 @@ public class TokenManager {
 
     public CompletableFuture<PlayerData> getPlayerData(UUID uuid) {
         return CompletableFuture.supplyAsync(() -> {
-            try (Connection conn = databaseManager.getConnection()) {
-                String sql = "SELECT * FROM player_data WHERE uuid = ?";
-                PreparedStatement stmt = conn.prepareStatement(sql);
+            try (Connection conn = databaseManager.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement("SELECT * FROM player_data WHERE uuid = ?")) {
                 stmt.setString(1, uuid.toString());
-
-                ResultSet rs = stmt.executeQuery();
-                if (rs.next()) {
-                    PlayerData data = new PlayerData(
-                            uuid,
-                            rs.getString("username"),
-                            rs.getInt("monthly_tokens"),
-                            rs.getInt("permanent_tokens"),
-                            rs.getInt("last_reset_month"),
-                            rs.getString("color"),
-                            rs.getString("last_server"),
-                            rs.getLong("last_online")
-                    );
-                    // Check for monthly reset when loading data
-                    checkMonthlyReset(data);
-                    return data;
-                } else {
-                    return createPlayerData(uuid);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        PlayerData data = new PlayerData(
+                                uuid,
+                                rs.getString("username"),
+                                rs.getInt("monthly_tokens"),
+                                rs.getInt("permanent_tokens"),
+                                rs.getInt("last_reset_month"),
+                                rs.getString("color"),
+                                rs.getString("last_server"),
+                                rs.getLong("last_online")
+                        );
+                        // Check for monthly reset when loading data
+                        checkMonthlyReset(data);
+                        return data;
+                    } else {
+                        return createPlayerData(uuid);
+                    }
                 }
             } catch (SQLException e) {
                 e.printStackTrace();
@@ -126,6 +125,9 @@ public class TokenManager {
     }
 
     private int calculateMonthlyTokens(UUID uuid) {
+        // Can only evaluate live permissions for online players
+        if (proxy.getPlayer(uuid).isEmpty()) return 0;
+
         if (hasPermission(uuid, "core.joinme.tokens.unlimited")) {
             return Integer.MAX_VALUE;
         }
@@ -158,19 +160,19 @@ public class TokenManager {
     }
 
     private boolean savePlayerData(PlayerData data) {
-        try (Connection conn = databaseManager.getConnection()) {
-            int monthly = Math.max(0, Math.min(data.getMonthlyTokens(), Integer.MAX_VALUE));
-            int perm = Math.max(0, Math.min(data.getPermanentTokens(), Integer.MAX_VALUE));
-            data.setMonthlyTokens(monthly);
-            data.setPermanentTokens(perm);
+        int monthly = Math.max(0, data.getMonthlyTokens());
+        int perm = Math.max(0, data.getPermanentTokens());
+        data.setMonthlyTokens(monthly);
+        data.setPermanentTokens(perm);
 
-            String sql = "INSERT INTO player_data (uuid, username, monthly_tokens, permanent_tokens, last_reset_month, color, last_server, last_online) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
-                    "username = VALUES(username), monthly_tokens = VALUES(monthly_tokens), " +
-                    "permanent_tokens = VALUES(permanent_tokens), last_reset_month = VALUES(last_reset_month), " +
-                    "color = VALUES(color), last_server = VALUES(last_server), last_online = VALUES(last_online)";
+        String sql = "INSERT INTO player_data (uuid, username, monthly_tokens, permanent_tokens, last_reset_month, color, last_server, last_online) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
+                "username = VALUES(username), monthly_tokens = VALUES(monthly_tokens), " +
+                "permanent_tokens = VALUES(permanent_tokens), last_reset_month = VALUES(last_reset_month), " +
+                "color = VALUES(color), last_server = VALUES(last_server), last_online = VALUES(last_online)";
 
-            PreparedStatement stmt = conn.prepareStatement(sql);
+        try (Connection conn = databaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, data.getUuid().toString());
             stmt.setString(2, data.getUsername());
             stmt.setInt(3, monthly);
@@ -179,7 +181,6 @@ public class TokenManager {
             stmt.setString(6, data.getColor());
             stmt.setString(7, data.getLastServer());
             stmt.setLong(8, data.getLastOnline());
-
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
             e.printStackTrace();

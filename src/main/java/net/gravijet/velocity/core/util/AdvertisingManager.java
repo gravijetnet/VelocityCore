@@ -57,7 +57,7 @@ public class AdvertisingManager {
             String message = messages.get(currentMessageIndex++);
             Component component = CompatibilityHelper.colorize(message);
             server.getAllPlayers().forEach(player -> CompatibilityHelper.sendMessage(player, component));
-        }, 0, interval, TimeUnit.MINUTES);
+        }, interval, interval, TimeUnit.MINUTES);
     }
 
     public void stop() {

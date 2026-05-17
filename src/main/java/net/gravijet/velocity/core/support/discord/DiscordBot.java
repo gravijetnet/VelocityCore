@@ -31,6 +31,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -430,6 +431,7 @@ public class DiscordBot {
         ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
         try {
             String transcriptChannelId = discordNode.node("transcript-channel-id").getString();
+            if (transcriptChannelId == null || transcriptChannelId.isBlank()) return;
             TextChannel channel = (TextChannel) client.getChannelById(Snowflake.of(transcriptChannelId)).block();
             if (channel == null) return;
 
@@ -537,6 +539,10 @@ public class DiscordBot {
     private void sendTranscript(TextChannel channel, String sessionId, String language, String playerName, Instant createdAt) throws Exception {
         ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
         String transcriptChannelId = discordNode.node("transcript-channel-id").getString();
+        if (transcriptChannelId == null || transcriptChannelId.isBlank()) {
+            plugin.getLogger().warn("transcript-channel-id is not configured, skipping transcript upload.");
+            return;
+        }
         TextChannel transcriptCh = (TextChannel) client.getChannelById(Snowflake.of(transcriptChannelId)).block();
         if (transcriptCh == null) return;
 
@@ -578,7 +584,7 @@ public class DiscordBot {
             if (messages == null) return null;
             Collections.reverse(messages);
 
-            try (FileWriter w = new FileWriter(f)) {
+            try (FileWriter w = new FileWriter(f, StandardCharsets.UTF_8)) {
                 w.write("Support Transcript\n");
                 w.write("Player:   " + playerName + "\n");
                 w.write("Language: " + language + "\n");
