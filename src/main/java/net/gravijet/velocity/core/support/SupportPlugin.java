@@ -43,7 +43,7 @@ public class SupportPlugin {
             manager    = new SupportManager(this, configManager); // Pass ConfigManager
             discordBot = new DiscordBot(this, configManager, manager); // Pass ConfigManager
 
-            var supportMeta = server.getCommandManager().metaBuilder("support").aliases("help").build();
+            var supportMeta = server.getCommandManager().metaBuilder("support").build();
             server.getCommandManager().register(supportMeta, new SupportCommand(this));
 
             var spcMeta = server.getCommandManager().metaBuilder("spc").build();

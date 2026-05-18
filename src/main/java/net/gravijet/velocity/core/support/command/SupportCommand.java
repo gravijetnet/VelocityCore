@@ -163,7 +163,7 @@ public class SupportCommand implements SimpleCommand {
         if (inv.source() instanceof Player p && inv.arguments().length <= 1) {
             if (perm(p, "view")) {
                 return CompletableFuture.completedFuture(List.of(
-                        "help", "claim", "close", "transfer", "de", "en", "chat", "rate", "ban", "unban"));
+                        "help", "claim", "close", "de", "en", "chat", "rate", "ban", "unban"));
             }
             return CompletableFuture.completedFuture(List.of("help", "de", "en", "chat", "rate"));
         }

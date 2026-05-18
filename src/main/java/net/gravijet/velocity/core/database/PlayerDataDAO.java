@@ -2,6 +2,9 @@ package net.gravijet.velocity.core.database;
 
 import net.gravijet.velocity.core.database.models.PlayerData;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +13,7 @@ import java.util.concurrent.CompletableFuture;
 
 public class PlayerDataDAO {
 
+    private static final Logger logger = LoggerFactory.getLogger(PlayerDataDAO.class);
     private final DatabaseManager databaseManager;
 
     public PlayerDataDAO(DatabaseManager databaseManager) {
@@ -21,21 +25,22 @@ public class PlayerDataDAO {
             try (Connection connection = databaseManager.getConnection();
                  PreparedStatement ps = connection.prepareStatement("SELECT * FROM player_data WHERE uuid = ?")) {
                 ps.setString(1, uuid.toString());
-                ResultSet rs = ps.executeQuery();
-                if (rs.next()) {
-                    return new PlayerData(
-                            uuid,
-                            rs.getString("username"),
-                            rs.getInt("monthly_tokens"),
-                            rs.getInt("permanent_tokens"),
-                            rs.getInt("last_reset_month"),
-                            rs.getString("color"),
-                            rs.getString("last_server"),
-                            rs.getLong("last_online")
-                    );
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        return new PlayerData(
+                                uuid,
+                                rs.getString("username"),
+                                rs.getInt("monthly_tokens"),
+                                rs.getInt("permanent_tokens"),
+                                rs.getInt("last_reset_month"),
+                                rs.getString("color"),
+                                rs.getString("last_server"),
+                                rs.getLong("last_online")
+                        );
+                    }
                 }
             } catch (SQLException e) {
-                e.printStackTrace();
+                logger.error("Failed to get player data for {}", uuid, e);
             }
             return null;
         });
@@ -46,21 +51,26 @@ public class PlayerDataDAO {
             try (Connection connection = databaseManager.getConnection();
                  PreparedStatement ps = connection.prepareStatement("SELECT * FROM player_data WHERE username = ?")) {
                 ps.setString(1, name);
-                ResultSet rs = ps.executeQuery();
-                if (rs.next()) {
-                    return new PlayerData(
-                            UUID.fromString(rs.getString("uuid")),
-                            rs.getString("username"),
-                            rs.getInt("monthly_tokens"),
-                            rs.getInt("permanent_tokens"),
-                            rs.getInt("last_reset_month"),
-                            rs.getString("color"),
-                            rs.getString("last_server"),
-                            rs.getLong("last_online")
-                    );
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        try {
+                            return new PlayerData(
+                                    UUID.fromString(rs.getString("uuid")),
+                                    rs.getString("username"),
+                                    rs.getInt("monthly_tokens"),
+                                    rs.getInt("permanent_tokens"),
+                                    rs.getInt("last_reset_month"),
+                                    rs.getString("color"),
+                                    rs.getString("last_server"),
+                                    rs.getLong("last_online")
+                            );
+                        } catch (IllegalArgumentException e) {
+                            logger.error("Corrupt UUID in database for username '{}'", name, e);
+                        }
+                    }
                 }
             } catch (SQLException e) {
-                e.printStackTrace();
+                logger.error("Failed to get player data for name '{}'", name, e);
             }
             return null;
         });
@@ -91,7 +101,22 @@ public class PlayerDataDAO {
                 ps.setLong(8, data.getLastOnline());
                 ps.executeUpdate();
             } catch (SQLException e) {
-                e.printStackTrace();
+                logger.error("Failed to save player data for {}", data.getUuid(), e);
+            }
+        });
+    }
+
+    public CompletableFuture<Void> updateLastSeen(UUID uuid, long lastOnline, String lastServer) {
+        return CompletableFuture.runAsync(() -> {
+            try (Connection connection = databaseManager.getConnection();
+                 PreparedStatement ps = connection.prepareStatement(
+                         "UPDATE player_data SET last_online = ?, last_server = ? WHERE uuid = ?")) {
+                ps.setLong(1, lastOnline);
+                ps.setString(2, lastServer);
+                ps.setString(3, uuid.toString());
+                ps.executeUpdate();
+            } catch (SQLException e) {
+                logger.error("Failed to update last seen for {}", uuid, e);
             }
         });
     }
@@ -100,22 +125,26 @@ public class PlayerDataDAO {
         return CompletableFuture.supplyAsync(() -> {
             List<PlayerData> players = new ArrayList<>();
             try (Connection connection = databaseManager.getConnection();
-                 PreparedStatement ps = connection.prepareStatement("SELECT * FROM player_data")) {
-                ResultSet rs = ps.executeQuery();
+                 PreparedStatement ps = connection.prepareStatement("SELECT * FROM player_data");
+                 ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    players.add(new PlayerData(
-                            UUID.fromString(rs.getString("uuid")),
-                            rs.getString("username"),
-                            rs.getInt("monthly_tokens"),
-                            rs.getInt("permanent_tokens"),
-                            rs.getInt("last_reset_month"),
-                            rs.getString("color"),
-                            rs.getString("last_server"),
-                            rs.getLong("last_online")
-                    ));
+                    try {
+                        players.add(new PlayerData(
+                                UUID.fromString(rs.getString("uuid")),
+                                rs.getString("username"),
+                                rs.getInt("monthly_tokens"),
+                                rs.getInt("permanent_tokens"),
+                                rs.getInt("last_reset_month"),
+                                rs.getString("color"),
+                                rs.getString("last_server"),
+                                rs.getLong("last_online")
+                        ));
+                    } catch (IllegalArgumentException e) {
+                        logger.error("Corrupt UUID in database for username '{}'", rs.getString("username"), e);
+                    }
                 }
             } catch (SQLException e) {
-                e.printStackTrace();
+                logger.error("Failed to load all players", e);
             }
             return players;
         });

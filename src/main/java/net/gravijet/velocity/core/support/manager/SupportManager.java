@@ -51,16 +51,12 @@ public class SupportManager {
     private final Map<UUID, Instant> sessionLastActivity = new ConcurrentHashMap<>();
     private final Map<UUID, ClosedSessionNotification> pendingNotifications = new ConcurrentHashMap<>();
     private final Map<UUID, BanEntry> bans = new ConcurrentHashMap<>();
-    private final Map<String, String> linkedAccounts = new ConcurrentHashMap<>();
-    private final File linkedAccountsFile;
 
     public SupportManager(SupportPlugin plugin, ConfigManager configManager) {
         this.plugin = plugin;
         this.configManager = configManager;
         this.bansFile = new File(plugin.getDataDirectory().toFile(), "bans.json");
-        this.linkedAccountsFile = new File(plugin.getDataDirectory().toFile(), "linked_accounts.json");
         loadBans();
-        loadLinkedAccounts();
         startAutoCloseTask();
     }
 
@@ -81,11 +77,28 @@ public class SupportManager {
     }
 
     private void checkInactiveSessions() {
-        Instant cutoff = Instant.now().minusSeconds(3600);
-        pendingNotifications.entrySet().removeIf(e -> e.getValue().closedAt().plusSeconds(3600).isBefore(Instant.now()));
+        Instant now = Instant.now();
+        Instant cutoff = now.minusSeconds(3600);
+        Instant pruneCutoff = now.minusSeconds(86400);
+
+        pendingNotifications.entrySet().removeIf(e -> e.getValue().closedAt().plusSeconds(3600).isBefore(now));
+
+        // Prune closed sessions and their ratings older than 24 hours to prevent unbounded memory growth
+        closedSessions.entrySet().removeIf(e -> {
+            Instant closedAt = e.getValue().getClosedAt();
+            if (closedAt != null && closedAt.isBefore(pruneCutoff)) {
+                UUID prunedId = e.getKey();
+                ratedSessions.remove(prunedId);
+                playerToLastClosed.values().removeIf(v -> v.equals(prunedId));
+                return true;
+            }
+            return false;
+        });
 
         for (UUID sessionId : new ArrayList<>(activeSessions.keySet())) {
-            Instant last = sessionLastActivity.getOrDefault(sessionId, activeSessions.get(sessionId).getCreatedAt());
+            SupportSession session = activeSessions.get(sessionId);
+            if (session == null) continue;
+            Instant last = sessionLastActivity.getOrDefault(sessionId, session.getCreatedAt());
             if (last.isBefore(cutoff)) {
                 plugin.getLogger().info("Auto-closing inactive session: {}", sessionId);
                 autoCloseSession(sessionId);
@@ -98,10 +111,8 @@ public class SupportManager {
         if (session == null) return;
 
         Optional<Player> staffOpt = session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer);
-        staffOpt.ifPresent(staff -> {
-            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", "player", session.getPlayerName()));
-            staffToSession.remove(staff.getUniqueId());
-        });
+        staffOpt.ifPresent(staff ->
+            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", "player", session.getPlayerName())));
 
         discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
 
@@ -109,7 +120,7 @@ public class SupportManager {
         playerToSession.remove(session.getPlayerId());
         if (playerOpt.isPresent()) {
             CompatibilityHelper.sendMessage(playerOpt.get(), getMessage("support.ticket-auto-closed"));
-            sendRatingPrompt(playerOpt.get(), session);
+            sendRatingPrompt(playerOpt.get());
         } else {
             pendingNotifications.put(session.getPlayerId(), new ClosedSessionNotification(sessionId, Instant.now(), session.getLanguage()));
         }
@@ -118,7 +129,11 @@ public class SupportManager {
         logSessionAction(session, "AUTO_CLOSED", "Closed due to inactivity");
 
         if (plugin.getDiscordBot() != null) {
-            plugin.getDiscordBot().closeSupportChannel(session.getSessionId().toString(), session.getLanguage(), session.getPlayerName(), session.getCreatedAt());
+            final String sid = session.getSessionId().toString();
+            final String lang = session.getLanguage();
+            final String pname = session.getPlayerName();
+            final Instant createdAt = session.getCreatedAt();
+            ioExecutor.execute(() -> plugin.getDiscordBot().closeSupportChannel(sid, lang, pname, createdAt));
         }
     }
 
@@ -130,6 +145,12 @@ public class SupportManager {
         closedSessions.put(sessionId, session);
         playerToLastClosed.put(session.getPlayerId(), sessionId);
         sessionLastActivity.remove(sessionId);
+        // Always clean staffToSession regardless of whether the staff is online;
+        // the per-close lambdas only fire for online staff, leaving stale entries
+        // that block staff from claiming new sessions after reconnecting.
+        if (session.getStaffId() != null) {
+            staffToSession.remove(session.getStaffId());
+        }
     }
 
     public boolean canRequestSupport(Player player, String lang) {
@@ -158,7 +179,9 @@ public class SupportManager {
         String serverName = player.getCurrentServer().map(s -> s.getServerInfo().getName()).orElse("Unknown");
 
         if (plugin.getDiscordBot() != null) {
-            plugin.getDiscordBot().createSupportChannel(player.getUsername(), serverName, language, session.getSessionId().toString());
+            final String playerName0 = player.getUsername();
+            final String sessionIdStr = session.getSessionId().toString();
+            ioExecutor.execute(() -> plugin.getDiscordBot().createSupportChannel(playerName0, serverName, language, sessionIdStr));
         }
 
         Component component = getMessage("support.staff-notification",
@@ -270,8 +293,9 @@ public class SupportManager {
         }
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", "player", session.getPlayerName()));
-            staffToSession.remove(staff.getUniqueId());
+            if (!staff.getUniqueId().equals(closer.getUniqueId())) {
+                CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", "player", session.getPlayerName()));
+            }
         });
 
         discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
@@ -280,7 +304,7 @@ public class SupportManager {
         Optional<Player> playerOpt = plugin.getServer().getPlayer(session.getPlayerId());
         if (playerOpt.isPresent()) {
             CompatibilityHelper.sendMessage(playerOpt.get(), getMessage("support.ticket-closed"));
-            sendRatingPrompt(playerOpt.get(), session);
+            sendRatingPrompt(playerOpt.get());
         } else {
             pendingNotifications.put(session.getPlayerId(), new ClosedSessionNotification(sessionId, Instant.now(), session.getLanguage()));
         }
@@ -289,38 +313,56 @@ public class SupportManager {
         finalizeSession(session);
 
         if (plugin.getDiscordBot() != null) {
-            plugin.getDiscordBot().closeSupportChannel(session.getSessionId().toString(), session.getLanguage(), session.getPlayerName(), session.getCreatedAt());
+            final String sid = session.getSessionId().toString();
+            final String lang = session.getLanguage();
+            final String pname = session.getPlayerName();
+            final Instant createdAt = session.getCreatedAt();
+            ioExecutor.execute(() -> plugin.getDiscordBot().closeSupportChannel(sid, lang, pname, createdAt));
         }
     }
 
     public boolean closeSupportSessionFromDiscord(String discordStaffId) {
         UUID sessionId = discordStaffToSession.get(discordStaffId);
         if (sessionId == null) return false;
+        return closeSessionCore(sessionId, discordStaffId, "CLOSED_DISCORD", "Closed by Discord team member");
+    }
 
+    public boolean forceCloseSessionByUUID(UUID sessionId) {
+        if (!activeSessions.containsKey(sessionId)) return false;
+        return closeSessionCore(sessionId, null, "FORCE_CLOSED_DISCORD", "Force-closed by management via Discord");
+    }
+
+    private boolean closeSessionCore(UUID sessionId, String discordStaffId, String action, String detail) {
         SupportSession session = activeSessions.get(sessionId);
         if (session == null) return false;
 
-        session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", "player", session.getPlayerName()));
-            staffToSession.remove(staff.getUniqueId());
-        });
+        session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff ->
+            CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", "player", session.getPlayerName())));
 
-        discordStaffToSession.remove(discordStaffId);
+        if (discordStaffId != null) {
+            discordStaffToSession.remove(discordStaffId);
+        } else {
+            discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
+        }
         playerToSession.remove(session.getPlayerId());
 
         Optional<Player> playerOpt = plugin.getServer().getPlayer(session.getPlayerId());
         if (playerOpt.isPresent()) {
             CompatibilityHelper.sendMessage(playerOpt.get(), getMessage("support.ticket-closed"));
-            sendRatingPrompt(playerOpt.get(), session);
+            sendRatingPrompt(playerOpt.get());
         } else {
             pendingNotifications.put(session.getPlayerId(), new ClosedSessionNotification(sessionId, Instant.now(), session.getLanguage()));
         }
 
-        logSessionAction(session, "CLOSED_DISCORD", "Closed by Discord team member");
+        logSessionAction(session, action, detail);
         finalizeSession(session);
 
         if (plugin.getDiscordBot() != null) {
-            plugin.getDiscordBot().closeSupportChannel(session.getSessionId().toString(), session.getLanguage(), session.getPlayerName(), session.getCreatedAt());
+            final String sid = session.getSessionId().toString();
+            final String lang = session.getLanguage();
+            final String pname = session.getPlayerName();
+            final Instant createdAt = session.getCreatedAt();
+            ioExecutor.execute(() -> plugin.getDiscordBot().closeSupportChannel(sid, lang, pname, createdAt));
         }
         return true;
     }
@@ -386,7 +428,7 @@ public class SupportManager {
         logSessionChat(session, "Discord/" + discordStaffId, message);
     }
 
-    private void sendRatingPrompt(Player player, SupportSession session) {
+    private void sendRatingPrompt(Player player) {
         CompatibilityHelper.sendMessage(player, getMessage("support.rating-prompt"));
         Component row = Component.empty();
         for (int i = 1; i <= 5; i++) {
@@ -440,8 +482,7 @@ public class SupportManager {
         ClosedSessionNotification note = pendingNotifications.remove(player.getUniqueId());
         if (note != null && note.closedAt().plusSeconds(3600).isAfter(Instant.now())) {
             CompatibilityHelper.sendMessage(player, getMessage("support.ticket-auto-closed"));
-            SupportSession dummy = new SupportSession(player.getUniqueId(), player.getUsername(), note.language(), Instant.now());
-            sendRatingPrompt(player, dummy);
+            sendRatingPrompt(player);
         }
 
         UUID sessionId = playerToSession.get(player.getUniqueId());
@@ -481,7 +522,7 @@ public class SupportManager {
         }
         Player target = targetOpt.get();
         long millis = DurationUtil.parse(durationStr);
-        if (millis < 0) {
+        if (millis <= 0) {
             CompatibilityHelper.sendMessage(staff, getMessage("support.invalid-duration"));
             return;
         }
@@ -535,7 +576,7 @@ public class SupportManager {
     }
 
     private boolean hasPermission(Player p, String permission) {
-        return p.hasPermission(permission) || p.hasPermission("support.*");
+        return p.hasPermission(permission) || p.hasPermission(getStaffPermission() + ".*");
     }
 
     private void logSessionAction(SupportSession session, String action, String detail) {
@@ -559,9 +600,9 @@ public class SupportManager {
 
     private void appendLog(String filename, String content) {
         Path dir = plugin.getDataDirectory().resolve("logs");
+        // Directory is guaranteed by SupportPlugin.initDirectories() at startup
         ioExecutor.execute(() -> {
             try {
-                Files.createDirectories(dir);
                 Files.writeString(dir.resolve(filename), content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             } catch (IOException e) {
                 plugin.getLogger().warn("Failed to write log file {}: {}", filename, e.getMessage());
@@ -593,29 +634,6 @@ public class SupportManager {
                 mapper.writerWithDefaultPrettyPrinter().writeValue(bansFile, snapshot);
             } catch (IOException e) {
                 plugin.getLogger().error("Failed to save bans.json", e);
-            }
-        });
-    }
-
-    private void loadLinkedAccounts() {
-        if (!linkedAccountsFile.exists()) return;
-        try {
-            Map<String, String> loaded = mapper.readValue(linkedAccountsFile,
-                    mapper.getTypeFactory().constructMapType(Map.class, String.class, String.class));
-            linkedAccounts.putAll(loaded);
-            plugin.getLogger().info("Loaded {} linked account(s).", linkedAccounts.size());
-        } catch (IOException e) {
-            plugin.getLogger().error("Failed to load linked_accounts.json", e);
-        }
-    }
-
-    private void saveLinkedAccounts() {
-        Map<String, String> snapshot = new HashMap<>(linkedAccounts);
-        ioExecutor.execute(() -> {
-            try {
-                mapper.writerWithDefaultPrettyPrinter().writeValue(linkedAccountsFile, snapshot);
-            } catch (IOException e) {
-                plugin.getLogger().error("Failed to save linked_accounts.json", e);
             }
         });
     }

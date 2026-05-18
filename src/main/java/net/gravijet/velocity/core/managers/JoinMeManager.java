@@ -38,6 +38,15 @@ public class JoinMeManager {
     }
 
     public CompletableFuture<Boolean> sendJoinMe(Player player, boolean isAdmin) {
+        // Fail early if the player is not on any backend server — broadcastJoinMe would silently
+        // no-op otherwise, but we'd already have consumed a token and applied the cooldown.
+        if (player.getCurrentServer().isEmpty()) {
+            String notOnServer = configManager.getMessages().node("joinme", "not-on-server")
+                    .getString("<red>You must be connected to a server to use /joinme.");
+            CompatibilityHelper.sendMessage(player, CompatibilityHelper.colorize(notOnServer));
+            return CompletableFuture.completedFuture(false);
+        }
+
         long cooldownSeconds = getCooldown(player.getUniqueId());
         if (!isAdmin && !player.hasPermission("velocitycore.joinme.cooldown.bypass") && cooldownSeconds > 0) {
             CompatibilityHelper.sendMessage(player, getMessage("joinme.on_cooldown", "cooldown", String.valueOf(cooldownSeconds)));
@@ -49,11 +58,17 @@ public class JoinMeManager {
             return CompletableFuture.completedFuture(true);
         }
 
-        return tokenManager.getPlayerData(player.getUniqueId()).thenCompose(data -> {
-            if (tokenManager.hasUnlimitedTokens(player.getUniqueId())) {
-                broadcastJoinMe(player, false);
-                return CompletableFuture.completedFuture(true);
+        // Check permission before hitting the DB — unlimited players skip the fetch entirely.
+        if (tokenManager.hasUnlimitedTokens(player.getUniqueId())) {
+            if (!player.hasPermission("velocitycore.joinme.cooldown.bypass")) {
+                long cooldownDuration = configManager.getConfig().node("joinme", "cooldown").getLong(60);
+                cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(cooldownDuration));
             }
+            broadcastJoinMe(player, false);
+            return CompletableFuture.completedFuture(true);
+        }
+
+        return tokenManager.getPlayerData(player.getUniqueId()).thenCompose(data -> {
             if (data == null || data.getTotalTokens() <= 0) {
                 CompatibilityHelper.sendMessage(player, getMessage("joinme.no_tokens", new String[0]));
                 return CompletableFuture.completedFuture(false);
@@ -140,7 +155,9 @@ public class JoinMeManager {
 
     public long getCooldown(UUID uuid) {
         Long expiry = cooldowns.get(uuid);
-        if (expiry == null || expiry < System.currentTimeMillis()) {
+        if (expiry == null) return 0;
+        if (expiry < System.currentTimeMillis()) {
+            cooldowns.remove(uuid);
             return 0;
         }
         return TimeUnit.MILLISECONDS.toSeconds(expiry - System.currentTimeMillis());
@@ -158,21 +175,23 @@ public class JoinMeManager {
     }
 
     public String getPlayerColorPreference(UUID uuid) {
-        String cached = colorPreferences.get(uuid);
-        if (cached != null) return cached;
-        try {
-            PlayerData data = tokenManager.getPlayerData(uuid).join();
+        return colorPreferences.get(uuid);
+    }
+
+    public void loadColorPreference(UUID uuid) {
+        tokenManager.getPlayerData(uuid).thenAccept(data -> {
             if (data != null && data.getColor() != null) {
                 String color = data.getColor();
-                // Migrate old §-format (stored before MiniMessage migration)
                 if (color.startsWith("§")) {
                     color = sectionSignToMiniMessage(color);
                 }
                 colorPreferences.put(uuid, color);
-                return color;
             }
-        } catch (Exception ignored) {}
-        return null;
+        });
+    }
+
+    public void clearColorPreference(UUID uuid) {
+        colorPreferences.remove(uuid);
     }
 
     private static String legacyToMiniMessage(String code) {

@@ -7,10 +7,15 @@ import net.gravijet.velocity.core.util.CompatibilityHelper;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class BugCommand implements SimpleCommand {
     private final SupportPlugin plugin;
+    private static final long COOLDOWN_MS = 60_000L;
+    private final Map<UUID, Long> cooldowns = new ConcurrentHashMap<>();
 
     public BugCommand(SupportPlugin plugin) {
         this.plugin = plugin;
@@ -52,6 +57,19 @@ public class BugCommand implements SimpleCommand {
             return;
         }
 
+        long now = System.currentTimeMillis();
+        Long lastUsed = cooldowns.get(player.getUniqueId());
+        if (lastUsed != null && now - lastUsed < COOLDOWN_MS) {
+            long remaining = Math.max(1L, (COOLDOWN_MS - (now - lastUsed)) / 1000L);
+            CompatibilityHelper.sendMessage(player, CompatibilityHelper.colorize(
+                    "<red>Please wait <white>" + remaining + "s<red> before submitting another bug report."));
+            return;
+        }
+        // Replace (not just put) to lazily evict the previous expired entry.
+        cooldowns.put(player.getUniqueId(), now);
+        // Evict entries that expired more than twice the cooldown ago to prevent unbounded growth.
+        cooldowns.entrySet().removeIf(e -> now - e.getValue() > COOLDOWN_MS * 2);
+
         String serverName = player.getCurrentServer()
                 .map(s -> s.getServerInfo().getName())
                 .orElse("Unknown");
@@ -59,6 +77,7 @@ public class BugCommand implements SimpleCommand {
         plugin.getServer().getScheduler()
                 .buildTask(plugin.getCorePlugin(), () -> {
                     boolean success = plugin.getDiscordBot().sendBugReport(player.getUsername(), serverName, title, message);
+                    if (!player.isActive()) return;
                     if (success) {
                         CompatibilityHelper.sendMessage(player,
                                 CompatibilityHelper.colorize(msg("bug.report-sent"), "title", title));

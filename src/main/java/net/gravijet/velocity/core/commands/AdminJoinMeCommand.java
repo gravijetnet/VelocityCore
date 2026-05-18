@@ -91,7 +91,7 @@ public class AdminJoinMeCommand implements SimpleCommand {
                 }
                 long cooldownSeconds = joinMeManager.getCooldown(onlinePlayer.getUniqueId());
                 String cooldownFormatted = cooldownSeconds > 0 ? formatDuration(cooldownSeconds) : msg("tokens.cooldown.ready");
-                String status = cooldownSeconds > 0 ? msg("tokens.status.empty") : msg("tokens.status.available");
+                String status = data.getTotalTokens() > 0 ? msg("tokens.status.available") : msg("tokens.status.empty");
                 CompatibilityHelper.sendMessage(source, CompatibilityHelper.colorize(
                         msg("joinme.status_format"),
                         "status", status,
@@ -107,22 +107,16 @@ public class AdminJoinMeCommand implements SimpleCommand {
                     send(source, "general.player-not-found", "player", playerName);
                     return;
                 }
-                tokenManager.getPlayerData(offlineData.getUuid()).thenAccept(data -> {
-                    if (data == null) {
-                        send(source, "admin-joinme.tokens-error");
-                        return;
-                    }
-                    String cooldownFormatted = msg("tokens.cooldown.ready");
-                    String status = data.getTotalTokens() > 0 ? msg("tokens.status.available") : msg("tokens.status.empty");
-                    CompatibilityHelper.sendMessage(source, CompatibilityHelper.colorize(
-                            msg("joinme.status_format"),
-                            "status", status,
-                            "total", String.valueOf(data.getTotalTokens()),
-                            "monthly", String.valueOf(data.getMonthlyTokens()),
-                            "permanent", String.valueOf(data.getPermanentTokens()),
-                            "cooldown", cooldownFormatted
-                    ));
-                });
+                String cooldownFormatted = msg("tokens.cooldown.ready");
+                String status = offlineData.getTotalTokens() > 0 ? msg("tokens.status.available") : msg("tokens.status.empty");
+                CompatibilityHelper.sendMessage(source, CompatibilityHelper.colorize(
+                        msg("joinme.status_format"),
+                        "status", status,
+                        "total", String.valueOf(offlineData.getTotalTokens()),
+                        "monthly", String.valueOf(offlineData.getMonthlyTokens()),
+                        "permanent", String.valueOf(offlineData.getPermanentTokens()),
+                        "cooldown", cooldownFormatted
+                ));
             });
         }
     }

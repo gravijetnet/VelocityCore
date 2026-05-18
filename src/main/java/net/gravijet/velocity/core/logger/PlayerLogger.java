@@ -1,16 +1,28 @@
 package net.gravijet.velocity.core.logger;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class PlayerLogger {
 
+    private static final Logger logger = LoggerFactory.getLogger(PlayerLogger.class);
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final Path logDirectory;
+    private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "player-logger-io");
+        t.setDaemon(true);
+        return t;
+    });
 
     public PlayerLogger(Path dataDirectory) {
         this.logDirectory = dataDirectory.resolve("player_logs");
@@ -33,12 +45,28 @@ public class PlayerLogger {
         log(playerName, playerName + " LEFT [" + server + "] (" + ip + ")");
     }
 
+    public void shutdown() {
+        ioExecutor.shutdown();
+        try {
+            if (!ioExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                ioExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            ioExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private void log(String playerName, String message) {
         String line = "[" + LocalDateTime.now().format(FORMATTER) + "] " + message + System.lineSeparator();
-        Path logFile = logDirectory.resolve(playerName + ".log");
-        try {
-            Files.writeString(logFile, line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (IOException ignored) {
-        }
+        String safeName = playerName.replaceAll("[^a-zA-Z0-9_]", "_");
+        Path logFile = logDirectory.resolve(safeName + ".log");
+        ioExecutor.execute(() -> {
+            try {
+                Files.writeString(logFile, line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            } catch (IOException e) {
+                logger.warn("Failed to write player log for {}: {}", playerName, e.getMessage());
+            }
+        });
     }
 }

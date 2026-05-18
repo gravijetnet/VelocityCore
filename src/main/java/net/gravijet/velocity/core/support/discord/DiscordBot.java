@@ -49,6 +49,9 @@ public class DiscordBot {
     private GatewayDiscordClient client;
     private String botToken;
 
+    private final java.net.http.HttpClient httpClient = java.net.http.HttpClient.newHttpClient();
+    private final com.fasterxml.jackson.databind.ObjectMapper bugMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
     private final Map<String, TextChannel> sessionToChannel = new ConcurrentHashMap<>();
     private final Map<String, String> channelToSession = new ConcurrentHashMap<>();
     private final Map<String, String> channelToPlayer = new ConcurrentHashMap<>();
@@ -68,26 +71,32 @@ public class DiscordBot {
         if (!discordNode.node("enabled").getBoolean(false)) {
             return;
         }
-        try {
-            String token = discordNode.node("bot-token").getString();
-            if (token == null || token.equals("YOUR_DISCORD_BOT_TOKEN_HERE")) {
-                plugin.getLogger().error("Discord bot token is not set in config.yml. Bot will not start.");
-                return;
-            }
-            this.botToken = token;
-            this.client = DiscordClient.create(token).login().block();
-            if (client == null) {
-                plugin.getLogger().error("Discord login failed.");
-                return;
-            }
-            client.on(ReadyEvent.class, e -> Mono.fromRunnable(() -> onReady(e)).subscribeOn(Schedulers.boundedElastic())).subscribe();
-            client.on(ButtonInteractionEvent.class, this::onButtonInteraction).subscribe();
-            client.on(MessageCreateEvent.class, this::onMessageCreate).subscribe();
-            client.on(ChatInputInteractionEvent.class, this::onSlashCommand).subscribe();
-            plugin.getLogger().info("Discord bot started.");
-        } catch (Exception e) {
-            plugin.getLogger().error("Failed to start Discord bot.", e);
+        String token = discordNode.node("bot-token").getString();
+        if (token == null || token.equals("YOUR_DISCORD_BOT_TOKEN_HERE")) {
+            plugin.getLogger().error("Discord bot token is not set in config.yml. Bot will not start.");
+            return;
         }
+        this.botToken = token;
+        // Login blocks until WebSocket is established — run off the Velocity event thread
+        // so proxy initialization is not stalled. All client-null checks already guard callers.
+        Thread loginThread = new Thread(() -> {
+            try {
+                this.client = DiscordClient.create(token).login().block();
+                if (this.client == null) {
+                    plugin.getLogger().error("Discord login failed.");
+                    return;
+                }
+                client.on(ReadyEvent.class, e -> Mono.fromRunnable(() -> onReady(e)).subscribeOn(Schedulers.boundedElastic())).subscribe();
+                client.on(ButtonInteractionEvent.class, this::onButtonInteraction).subscribe();
+                client.on(MessageCreateEvent.class, this::onMessageCreate).subscribe();
+                client.on(ChatInputInteractionEvent.class, this::onSlashCommand).subscribe();
+                plugin.getLogger().info("Discord bot started.");
+            } catch (Exception e) {
+                plugin.getLogger().error("Failed to start Discord bot.", e);
+            }
+        }, "discord-bot-login");
+        loginThread.setDaemon(true);
+        loginThread.start();
     }
 
     public void stop() {
@@ -172,7 +181,8 @@ public class DiscordBot {
 
             String playerName = channelToPlayer.get(channelId);
             if (playerName == null) {
-                TextChannel ch = (TextChannel) client.getChannelById(Snowflake.of(channelId)).block();
+                TextChannel ch = client.getChannelById(Snowflake.of(channelId))
+                        .ofType(TextChannel.class).blockOptional().orElse(null);
                 playerName = ch != null ? extractFromChannelName(ch.getName(), 2) : "unknown";
             }
 
@@ -181,9 +191,6 @@ public class DiscordBot {
 
             boolean ok = manager.claimSupportFromDiscord(discordId, claimName, playerName, false);
             if (ok) {
-                claimedByUserId.put(channelId, discordId);
-                claimedByName.put(channelId, claimName);
-                discordStaffSession.put(discordId, sessionId);
                 updateChannelToClaimed(sessionId, claimName, discordId);
                 return configManager.getMessages().node("support", "discord", "claim-message").getString("{staff} has claimed this ticket.").replace("{staff}", claimName);
             }
@@ -206,6 +213,15 @@ public class DiscordBot {
             boolean ok = manager.closeSupportSessionFromDiscord(member.getId().asString());
             if (!ok && claimerUserId != null) {
                 ok = manager.closeSupportSessionFromDiscord(claimerUserId);
+            }
+            // Management closing an unclaimed ticket: fall back to close by session ID directly
+            if (!ok) {
+                String sessionId = channelToSession.get(channelId);
+                if (sessionId != null) {
+                    try {
+                        ok = manager.forceCloseSessionByUUID(java.util.UUID.fromString(sessionId));
+                    } catch (IllegalArgumentException ignored) {}
+                }
             }
             return ok ? "Support session closed." : "Could not close the session.";
         }).subscribeOn(Schedulers.boundedElastic())
@@ -278,15 +294,17 @@ public class DiscordBot {
                                     return event.editReply().withContent("Failed to generate chart.").then();
                                 }
                                 try {
+                                    byte[] chartBytes = Files.readAllBytes(chart.toPath());
+                                    chart.delete();
                                     return event.editReply().withContentOrNull(null)
                                             .then(event.createFollowup()
                                                     .withEphemeral(!visible)
                                                     .withFiles(discord4j.core.spec.MessageCreateFields.File.of(
-                                                            "stats.png", Files.newInputStream(chart.toPath())))
-                                                    .then())
-                                            .doFinally(s -> chart.delete());
+                                                            "stats.png", new java.io.ByteArrayInputStream(chartBytes)))
+                                                    .then());
                                 } catch (Exception e) {
                                     plugin.getLogger().error("Error sending stats chart.", e);
+                                    chart.delete();
                                     return event.editReply().withContent("Failed to load statistics.").then();
                                 }
                             })
@@ -301,14 +319,26 @@ public class DiscordBot {
         ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
         try {
             String guildId = discordNode.node("guild-id").getString();
+            if (guildId == null) {
+                plugin.getLogger().error("Discord guild-id is not configured, cannot create support channel.");
+                return;
+            }
             String supportCategoryId = discordNode.node("support-category-id").getString();
+            if (supportCategoryId == null) {
+                plugin.getLogger().error("Discord support-category-id is not configured, cannot create support channel.");
+                return;
+            }
             String channelNameFormat = discordNode.node("channel-name-format").getString("{status}-{language}-{player}-{server}");
             String openColor = discordNode.node("open-color").getString("BLUE");
 
             Guild guild = client.getGuildById(Snowflake.of(guildId)).block();
             if (guild == null) return;
-            Category cat = (Category) client.getChannelById(Snowflake.of(supportCategoryId)).block();
-            if (cat == null) return;
+            Category cat = client.getChannelById(Snowflake.of(supportCategoryId))
+                    .ofType(Category.class).blockOptional().orElse(null);
+            if (cat == null) {
+                plugin.getLogger().error("support-category-id '{}' is not a category channel.", supportCategoryId);
+                return;
+            }
 
             String name = buildChannelName("o", language, playerName, serverName, channelNameFormat);
             TextChannel channel = guild.createTextChannel(TextChannelCreateSpec.builder()
@@ -432,7 +462,8 @@ public class DiscordBot {
         try {
             String transcriptChannelId = discordNode.node("transcript-channel-id").getString();
             if (transcriptChannelId == null || transcriptChannelId.isBlank()) return;
-            TextChannel channel = (TextChannel) client.getChannelById(Snowflake.of(transcriptChannelId)).block();
+            TextChannel channel = client.getChannelById(Snowflake.of(transcriptChannelId))
+                    .ofType(TextChannel.class).blockOptional().orElse(null);
             if (channel == null) return;
 
             EmbedCreateSpec embed = EmbedCreateSpec.builder()
@@ -469,31 +500,28 @@ public class DiscordBot {
             String timeStr = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
                     .format(LocalDateTime.now(ZoneId.systemDefault()));
 
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-
-            com.fasterxml.jackson.databind.node.ObjectNode embedNode = mapper.createObjectNode();
+            com.fasterxml.jackson.databind.node.ObjectNode embedNode = bugMapper.createObjectNode();
             embedNode.put("color", 0xFFA500);
             embedNode.put("title", "Bug Report: " + title);
             com.fasterxml.jackson.databind.node.ArrayNode fieldsArray = embedNode.putArray("fields");
-            fieldsArray.add(mapper.createObjectNode().put("name", "Reported by").put("value", playerName).put("inline", true));
-            fieldsArray.add(mapper.createObjectNode().put("name", "Server").put("value", serverName).put("inline", true));
-            fieldsArray.add(mapper.createObjectNode().put("name", "Time").put("value", timeStr).put("inline", true));
-            fieldsArray.add(mapper.createObjectNode().put("name", "Description").put("value", message).put("inline", false));
+            fieldsArray.add(bugMapper.createObjectNode().put("name", "Reported by").put("value", playerName).put("inline", true));
+            fieldsArray.add(bugMapper.createObjectNode().put("name", "Server").put("value", serverName).put("inline", true));
+            fieldsArray.add(bugMapper.createObjectNode().put("name", "Time").put("value", timeStr).put("inline", true));
+            fieldsArray.add(bugMapper.createObjectNode().put("name", "Description").put("value", message).put("inline", false));
 
-            com.fasterxml.jackson.databind.node.ObjectNode msgNode = mapper.createObjectNode();
+            com.fasterxml.jackson.databind.node.ObjectNode msgNode = bugMapper.createObjectNode();
             msgNode.putArray("embeds").add(embedNode);
 
             String threadName = "Bug: " + title.substring(0, Math.min(title.length(), 90));
-            com.fasterxml.jackson.databind.node.ObjectNode bodyNode = mapper.createObjectNode();
+            com.fasterxml.jackson.databind.node.ObjectNode bodyNode = bugMapper.createObjectNode();
             bodyNode.put("name", threadName);
             bodyNode.set("message", msgNode);
             if (tagId != null && !tagId.isEmpty()) {
                 bodyNode.putArray("applied_tags").add(tagId);
             }
 
-            String requestBody = mapper.writeValueAsString(bodyNode);
+            String requestBody = bugMapper.writeValueAsString(bodyNode);
 
-            java.net.http.HttpClient httpClient = java.net.http.HttpClient.newHttpClient();
             java.net.http.HttpRequest httpRequest = java.net.http.HttpRequest.newBuilder()
                     .uri(java.net.URI.create("https://discord.com/api/v10/channels/" + bugChannelId + "/threads"))
                     .header("Authorization", "Bot " + botToken)
@@ -543,7 +571,8 @@ public class DiscordBot {
             plugin.getLogger().warn("transcript-channel-id is not configured, skipping transcript upload.");
             return;
         }
-        TextChannel transcriptCh = (TextChannel) client.getChannelById(Snowflake.of(transcriptChannelId)).block();
+        TextChannel transcriptCh = client.getChannelById(Snowflake.of(transcriptChannelId))
+                .ofType(TextChannel.class).blockOptional().orElse(null);
         if (transcriptCh == null) return;
 
         File file = buildTranscriptFile(channel, sessionId, language, playerName, createdAt);
@@ -561,18 +590,20 @@ public class DiscordBot {
                 .timestamp(Instant.now())
                 .build();
 
+        byte[] fileBytes = Files.readAllBytes(file.toPath());
+        file.delete();
         transcriptCh.createMessage(MessageCreateSpec.builder()
                 .addEmbed(embed)
-                .addFile(file.getName(), Files.newInputStream(file.toPath()))
+                .addFile(file.getName(), new java.io.ByteArrayInputStream(fileBytes))
                 .build()).subscribe();
-        file.delete();
     }
 
     private File buildTranscriptFile(TextChannel channel, String sessionId, String language, String playerName, Instant createdAt) {
         try {
             File logDir = new File(plugin.getDataDirectory().toFile(), "logs");
             logDir.mkdirs();
-            String fname = String.format("support_%s_%s.txt", playerName,
+            String safeName = playerName.replaceAll("[^a-zA-Z0-9_]", "_");
+            String fname = String.format("support_%s_%s.txt", safeName,
                     DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").format(
                             LocalDateTime.ofInstant(createdAt, ZoneId.systemDefault())));
             File f = new File(logDir, fname);
@@ -658,7 +689,9 @@ public class DiscordBot {
 
     private String buildChannelName(String status, String lang, String player, String server, String fmt) {
         String safeName = player.toLowerCase().replaceAll("[^a-z0-9_]", "");
+        if (safeName.isEmpty()) safeName = "player";
         String safeServer = server.toLowerCase().replaceAll("[^a-z0-9_-]", "");
+        if (safeServer.isEmpty()) safeServer = "srv";
         String name = fmt.replace("{status}", status)
                 .replace("{language}", lang.toLowerCase())
                 .replace("{player}", safeName.substring(0, Math.min(safeName.length(), 10)))

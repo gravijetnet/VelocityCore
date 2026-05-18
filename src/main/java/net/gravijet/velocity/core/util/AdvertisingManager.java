@@ -11,6 +11,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class AdvertisingManager {
@@ -20,7 +21,7 @@ public class AdvertisingManager {
     private final ConfigManager configManager;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private ScheduledFuture<?> task;
-    private int currentMessageIndex = 0;
+    private final AtomicInteger currentMessageIndex = new AtomicInteger(0);
 
     public AdvertisingManager(Main plugin, ProxyServer server, ConfigManager configManager) {
         this.plugin = plugin;
@@ -50,11 +51,10 @@ public class AdvertisingManager {
             return;
         }
 
+        currentMessageIndex.set(0);
         task = scheduler.scheduleAtFixedRate(() -> {
-            if (currentMessageIndex >= messages.size()) {
-                currentMessageIndex = 0;
-            }
-            String message = messages.get(currentMessageIndex++);
+            int idx = currentMessageIndex.getAndUpdate(i -> (i + 1) % messages.size());
+            String message = messages.get(idx);
             Component component = CompatibilityHelper.colorize(message);
             server.getAllPlayers().forEach(player -> CompatibilityHelper.sendMessage(player, component));
         }, interval, interval, TimeUnit.MINUTES);

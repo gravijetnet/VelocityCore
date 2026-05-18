@@ -46,6 +46,7 @@ public class Main {
     private PlayerDataDAO playerDataDAO;
     private SupportPlugin supportPlugin;
     private PlayerLogger playerLogger;
+    private DatabaseManager databaseManager;
 
     @Inject
     public Main(ProxyServer proxy, Logger logger, @DataDirectory Path dataDirectory) {
@@ -58,12 +59,9 @@ public class Main {
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
         try {
-            // Force-load the MySQL JDBC driver
-            Class.forName("com.mysql.cj.jdbc.Driver");
-
             // Initialize Managers
             this.configManager = new ConfigManager(proxy, dataDirectory);
-            DatabaseManager databaseManager = new DatabaseManager(configManager);
+            this.databaseManager = new DatabaseManager(configManager);
             this.tokenManager = new TokenManager(databaseManager, proxy);
             this.joinMeManager = new JoinMeManager(this, proxy, tokenManager, configManager);
             this.advertisingManager = new AdvertisingManager(this, proxy, configManager);
@@ -93,8 +91,7 @@ public class Main {
 
             logger.info("[VelocityCore] Successfully initialized.");
         } catch (Exception e) {
-            logger.error("Failed to initialize VelocityCore", e);
-            shutdown();
+            logger.error("Failed to initialize VelocityCore — plugin disabled. Fix the config and restart.", e);
         }
     }
 
@@ -102,11 +99,14 @@ public class Main {
     public void onProxyShutdown(ProxyShutdownEvent event) {
         if (supportPlugin != null) supportPlugin.onProxyShutdown();
         if (advertisingManager != null) advertisingManager.stop();
+        if (playerLogger != null) playerLogger.shutdown();
+        if (databaseManager != null) databaseManager.close();
     }
 
     @Subscribe
     public void onPostLogin(PostLoginEvent event) {
         Player player = event.getPlayer();
+        if (joinMeManager != null) joinMeManager.loadColorPreference(player.getUniqueId());
         if (supportPlugin != null) supportPlugin.handlePlayerJoin(player);
     }
 
@@ -114,7 +114,9 @@ public class Main {
     public void onServerConnected(ServerConnectedEvent event) {
         if (playerLogger == null) return;
         Player player = event.getPlayer();
-        String ip = player.getRemoteAddress().getAddress().getHostAddress();
+        java.net.InetAddress addr = player.getRemoteAddress().getAddress();
+        if (addr == null) return;
+        String ip = addr.getHostAddress();
         String toServer = event.getServer().getServerInfo().getName();
 
         if (event.getPreviousServer().isPresent()) {
@@ -129,19 +131,20 @@ public class Main {
     public void onDisconnect(DisconnectEvent event) {
         Player player = event.getPlayer();
 
-        if (playerDataDAO != null) playerDataDAO.getPlayerData(player.getUniqueId()).thenAccept(data -> {
-            if (data != null) {
-                data.setLastOnline(System.currentTimeMillis());
-                player.getCurrentServer().ifPresent(server -> data.setLastServer(server.getServerInfo().getName()));
-                playerDataDAO.savePlayerData(data);
-            }
-        });
+        if (joinMeManager != null) joinMeManager.clearColorPreference(player.getUniqueId());
 
-        String ip = player.getRemoteAddress().getAddress().getHostAddress();
+        // Capture server synchronously — by the time the async DB fetch completes,
+        // the player is fully disconnected and getCurrentServer() returns empty.
         String lastServer = player.getCurrentServer()
                 .map(s -> s.getServerInfo().getName())
-                .orElse("unknown");
-        if (playerLogger != null) playerLogger.logLeave(player.getUsername(), ip, lastServer);
+                .orElse(null);
+
+        if (playerDataDAO != null) playerDataDAO.updateLastSeen(
+                player.getUniqueId(), System.currentTimeMillis(), lastServer);
+
+        java.net.InetAddress disconnectAddr = player.getRemoteAddress().getAddress();
+        String ip = disconnectAddr != null ? disconnectAddr.getHostAddress() : "unknown";
+        if (playerLogger != null) playerLogger.logLeave(player.getUsername(), ip, lastServer != null ? lastServer : "unknown");
 
         if (supportPlugin != null) supportPlugin.handlePlayerLeave(player);
     }

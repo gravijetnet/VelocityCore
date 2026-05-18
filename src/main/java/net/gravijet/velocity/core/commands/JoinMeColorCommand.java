@@ -50,8 +50,8 @@ public class JoinMeColorCommand implements SimpleCommand {
             return;
         }
 
-        // Validate legacy & color codes (e.g. &c, &a, &#rrggbb)
-        if (!rawColor.matches("&[0-9a-fk-orA-FK-OR]") && !rawColor.matches("&#[0-9a-fA-F]{6}")) {
+        // Only allow color codes (&0-9, &a-f) and hex (&#rrggbb); reject formatting codes (&k-&o, &r)
+        if (!rawColor.matches("&[0-9a-fA-F]") && !rawColor.matches("&#[0-9a-fA-F]{6}")) {
             CompatibilityHelper.sendMessage(player,
                     CompatibilityHelper.colorize(msg("joinme-color.usage")));
             return;
