@@ -16,9 +16,10 @@ import java.util.UUID;
 public class ImageMessageUtil {
 
     public static List<Component> createPlayerHeadLines(UUID playerId, int size) {
+        HttpURLConnection conn = null;
         try {
             URL url = new URL("https://mc-heads.net/avatar/" + playerId.toString());
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn = (HttpURLConnection) url.openConnection();
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (VelocityCore)");
             conn.setConnectTimeout(3000);
             conn.setReadTimeout(5000);
@@ -40,6 +41,8 @@ public class ImageMessageUtil {
                 placeholder.add(line.build());
             }
             return placeholder;
+        } finally {
+            if (conn != null) conn.disconnect();
         }
     }
 

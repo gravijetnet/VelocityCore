@@ -100,7 +100,7 @@ support:
   already-handling-session: "You are already handling a support session."
   already-claimed: "This ticket has already been claimed by <red>{staff}<white>."
   claimed-by-you: "You have claimed the support ticket for <red>{player}<white>."
-  claimed-by-staff: "<<red>{staff} <white>has claimed your support ticket."
+  claimed-by-staff: "<red>{staff} <white>has claimed your support ticket."
   invalid-rating: "Invalid rating. Please enter a number between 1 and 5."
   not-session-player: "You don't have a recently closed session to rate."
   already-rated: "You have already rated this support session."

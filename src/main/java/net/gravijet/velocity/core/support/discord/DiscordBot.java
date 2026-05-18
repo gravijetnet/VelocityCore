@@ -46,7 +46,7 @@ public class DiscordBot {
     private final SupportPlugin plugin;
     private final ConfigManager configManager;
     private final SupportManager manager;
-    private GatewayDiscordClient client;
+    private volatile GatewayDiscordClient client;
     private String botToken;
 
     private final java.net.http.HttpClient httpClient = java.net.http.HttpClient.newHttpClient();

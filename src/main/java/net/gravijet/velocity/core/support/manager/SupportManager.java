@@ -74,6 +74,14 @@ public class SupportManager {
     public void shutdown() {
         if (autoCloseTask != null) autoCloseTask.cancel();
         ioExecutor.shutdown();
+        try {
+            if (!ioExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                ioExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            ioExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void checkInactiveSessions() {

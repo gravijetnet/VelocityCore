@@ -80,7 +80,7 @@ public class BugCommand implements SimpleCommand {
                     if (!player.isActive()) return;
                     if (success) {
                         CompatibilityHelper.sendMessage(player,
-                                CompatibilityHelper.colorize(msg("bug.report-sent"), "title", title));
+                                CompatibilityHelper.colorize(msg("bug.report-sent"), "title", CompatibilityHelper.escapeMiniMessage(title)));
                         plugin.getLogger().info("Bug report from {}: {} - {}", player.getUsername(), title, message);
                     } else {
                         CompatibilityHelper.sendMessage(player,
