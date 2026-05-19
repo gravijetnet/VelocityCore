@@ -56,7 +56,12 @@ public class TokenManager {
 
     private PlayerData createPlayerData(UUID uuid) {
         String username = proxy.getPlayer(uuid).map(player -> player.getUsername()).orElse("Unknown");
-        PlayerData data = new PlayerData(uuid, username, 0, 2, getCurrentYearMonth(), null, null, 0);
+        // Seed the monthly allowance on first creation. Without this a player who
+        // holds a core.joinme.tokens.<n> permission and joins mid-month gets 0
+        // monthly tokens until the next monthly reset. calculateMonthlyTokens
+        // returns 0 for offline players, preserving the old behaviour off-thread.
+        int monthly = calculateMonthlyTokens(uuid);
+        PlayerData data = new PlayerData(uuid, username, monthly, 2, getCurrentYearMonth(), null, null, 0);
         savePlayerData(data);
         return data;
     }
@@ -136,9 +141,23 @@ public class TokenManager {
         // Permissions can only be evaluated for online players.
         // Defer the reset until they log in to avoid zeroing their monthly tokens.
         if (proxy.getPlayer(data.getUuid()).isEmpty()) return;
-        data.setMonthlyTokens(calculateMonthlyTokens(data.getUuid()));
+        int newMonthly = calculateMonthlyTokens(data.getUuid());
+
+        // Use a targeted UPDATE instead of a full row write to avoid overwriting
+        // concurrent token deductions (useToken atomic UPDATE) with a stale read.
+        try (Connection conn = databaseManager.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "UPDATE player_data SET monthly_tokens = ?, last_reset_month = ? WHERE uuid = ?")) {
+            stmt.setInt(1, newMonthly);
+            stmt.setInt(2, currentYearMonth);
+            stmt.setString(3, data.getUuid().toString());
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("Failed to reset monthly tokens for {}", data.getUuid(), e);
+        }
+        // Keep the in-memory object consistent so callers see the updated values.
+        data.setMonthlyTokens(newMonthly);
         data.setLastResetMonth(currentYearMonth);
-        savePlayerData(data);
     }
 
     private int calculateMonthlyTokens(UUID uuid) {
@@ -234,10 +253,19 @@ public class TokenManager {
     }
 
     public CompletableFuture<Boolean> setPlayerColor(UUID uuid, String color) {
-        return getPlayerData(uuid).thenApplyAsync(data -> {
-            if (data == null) return false;
-            data.setColor(color);
-            return savePlayerData(data);
+        // Use a targeted UPDATE instead of a full row read-modify-write to avoid
+        // overwriting concurrent token deductions with a stale snapshot of the row.
+        return CompletableFuture.supplyAsync(() -> {
+            try (Connection conn = databaseManager.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(
+                         "UPDATE player_data SET color = ? WHERE uuid = ?")) {
+                stmt.setString(1, color);
+                stmt.setString(2, uuid.toString());
+                return stmt.executeUpdate() > 0;
+            } catch (SQLException e) {
+                logger.error("Failed to set color for {}", uuid, e);
+                return false;
+            }
         });
     }
 }

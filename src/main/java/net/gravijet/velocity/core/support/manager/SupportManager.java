@@ -115,7 +115,10 @@ public class SupportManager {
     }
 
     private void autoCloseSession(UUID sessionId) {
-        SupportSession session = activeSessions.get(sessionId);
+        // Atomically claim the session: whichever close path removes it first
+        // owns the shutdown. Prevents a double transcript / rating prompt /
+        // Discord channel delete when the auto-close task races a manual close.
+        SupportSession session = activeSessions.remove(sessionId);
         if (session == null) return;
 
         Optional<Player> staffOpt = session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer);
@@ -248,12 +251,18 @@ public class SupportManager {
         session.setStaffName(staff.getUsername());
         session.setDiscordOnly(false);
         staffToSession.put(staff.getUniqueId(), sessionId);
+        // Mirror the Discord claim path: a fresh claim counts as activity so the
+        // ticket isn't auto-closed 1h after creation just because chat is quiet.
+        sessionLastActivity.put(sessionId, Instant.now());
 
         CompatibilityHelper.sendMessage(staff, getMessage("support.claimed-by-you", "player", target.getUsername()));
         CompatibilityHelper.sendMessage(target, getMessage("support.claimed-by-staff", "staff", staff.getUsername()));
 
         if (plugin.getDiscordBot() != null) {
-            plugin.getDiscordBot().updateChannelToClaimed(session.getSessionId().toString(), staff.getUsername(), staff.getUniqueId().toString());
+            final String sid = session.getSessionId().toString();
+            final String sName = staff.getUsername();
+            final String sId = staff.getUniqueId().toString();
+            ioExecutor.execute(() -> plugin.getDiscordBot().updateChannelToClaimed(sid, sName, sId));
         }
 
         logSessionAction(session, "CLAIMED", "Claimed by " + staff.getUsername());
@@ -294,7 +303,8 @@ public class SupportManager {
             CompatibilityHelper.sendMessage(closer, getMessage("support.no-open-ticket"));
             return;
         }
-        SupportSession session = activeSessions.get(sessionId);
+        // Atomic claim — see autoCloseSession.
+        SupportSession session = activeSessions.remove(sessionId);
         if (session == null) {
             CompatibilityHelper.sendMessage(closer, getMessage("support.no-open-ticket"));
             return;
@@ -336,12 +346,12 @@ public class SupportManager {
     }
 
     public boolean forceCloseSessionByUUID(UUID sessionId) {
-        if (!activeSessions.containsKey(sessionId)) return false;
         return closeSessionCore(sessionId, null, "FORCE_CLOSED_DISCORD", "Force-closed by management via Discord");
     }
 
     private boolean closeSessionCore(UUID sessionId, String discordStaffId, String action, String detail) {
-        SupportSession session = activeSessions.get(sessionId);
+        // Atomic claim — see autoCloseSession.
+        SupportSession session = activeSessions.remove(sessionId);
         if (session == null) return false;
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff ->
@@ -477,7 +487,10 @@ public class SupportManager {
         CompatibilityHelper.sendMessage(player, getMessage("support.rating-received", "rating", String.valueOf(rating)));
 
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff ->
-                CompatibilityHelper.sendMessage(staff, CompatibilityHelper.colorize("<gray>" + player.getUsername() + " rated this session <white>" + rating + "/5<gray>.")));
+                CompatibilityHelper.sendMessage(staff, CompatibilityHelper.colorize(
+                        "<gray>{player} rated this session <white>{rating}/5<gray>.",
+                        "player", CompatibilityHelper.escapeMiniMessage(player.getUsername()),
+                        "rating", String.valueOf(rating))));
 
         if (plugin.getDiscordBot() != null) {
             plugin.getDiscordBot().sendRatingEmbedToChannel(session.getSessionId().toString(), rating, player.getUsername(), staffName);
@@ -497,12 +510,14 @@ public class SupportManager {
         if (sessionId != null) {
             SupportSession session = activeSessions.get(sessionId);
             if (session != null) {
-                session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-                    CompatibilityHelper.sendMessage(staff, getMessage("support.player-online-status", "player", player.getUsername()));
-                    if (plugin.getDiscordBot() != null) {
-                        plugin.getDiscordBot().sendStatusMessageToChannel(sessionId.toString(), player.getUsername() + " is online");
-                    }
-                });
+                // Notify in-game staff regardless of whether a Discord staff also claimed.
+                session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff ->
+                        CompatibilityHelper.sendMessage(staff, getMessage("support.player-online-status", "player", player.getUsername())));
+                // Always notify the Discord channel — Discord-only sessions have no in-game
+                // staffId, so nesting this inside ifPresent would silently skip the update.
+                if (plugin.getDiscordBot() != null) {
+                    plugin.getDiscordBot().sendStatusMessageToChannel(sessionId.toString(), player.getUsername() + " is online");
+                }
             }
         }
     }
@@ -512,12 +527,11 @@ public class SupportManager {
         if (sessionId != null) {
             SupportSession session = activeSessions.get(sessionId);
             if (session != null) {
-                session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff -> {
-                    CompatibilityHelper.sendMessage(staff, getMessage("support.player-offline-status", "player", player.getUsername()));
-                    if (plugin.getDiscordBot() != null) {
-                        plugin.getDiscordBot().sendStatusMessageToChannel(sessionId.toString(), player.getUsername() + " went offline");
-                    }
-                });
+                session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer).ifPresent(staff ->
+                        CompatibilityHelper.sendMessage(staff, getMessage("support.player-offline-status", "player", player.getUsername())));
+                if (plugin.getDiscordBot() != null) {
+                    plugin.getDiscordBot().sendStatusMessageToChannel(sessionId.toString(), player.getUsername() + " went offline");
+                }
             }
         }
     }

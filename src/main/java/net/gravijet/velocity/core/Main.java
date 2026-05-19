@@ -33,7 +33,7 @@ import java.nio.file.Path;
 )
 public class Main {
 
-    private static Main instance;
+    private static volatile Main instance;
 
     private final ProxyServer proxy;
     private final Logger logger;
@@ -140,7 +140,7 @@ public class Main {
                 .orElse(null);
 
         if (playerDataDAO != null) playerDataDAO.updateLastSeen(
-                player.getUniqueId(), System.currentTimeMillis(), lastServer);
+                player.getUniqueId(), player.getUsername(), System.currentTimeMillis(), lastServer);
 
         java.net.InetAddress disconnectAddr = player.getRemoteAddress().getAddress();
         String ip = disconnectAddr != null ? disconnectAddr.getHostAddress() : "unknown";

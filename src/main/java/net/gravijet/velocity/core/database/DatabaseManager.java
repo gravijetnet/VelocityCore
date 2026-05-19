@@ -47,7 +47,7 @@ public class DatabaseManager {
                     "uuid VARCHAR(100) PRIMARY KEY, " +
                     "username VARCHAR(100), " +
                     "monthly_tokens INT DEFAULT 0, " +
-                    "permanent_tokens INT DEFAULT 1, " +
+                    "permanent_tokens INT DEFAULT 2, " +
                     "last_reset_month INT DEFAULT 0, " +
                     "color VARCHAR(64) DEFAULT NULL" +
                     ")")) {

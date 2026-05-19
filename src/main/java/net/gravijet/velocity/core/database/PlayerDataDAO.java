@@ -49,7 +49,7 @@ public class PlayerDataDAO {
     public CompletableFuture<PlayerData> getPlayerDataByName(String name) {
         return CompletableFuture.supplyAsync(() -> {
             try (Connection connection = databaseManager.getConnection();
-                 PreparedStatement ps = connection.prepareStatement("SELECT * FROM player_data WHERE username = ?")) {
+                 PreparedStatement ps = connection.prepareStatement("SELECT * FROM player_data WHERE LOWER(username) = LOWER(?)")) {
                 ps.setString(1, name);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next()) {
@@ -106,14 +106,20 @@ public class PlayerDataDAO {
         });
     }
 
-    public CompletableFuture<Void> updateLastSeen(UUID uuid, long lastOnline, String lastServer) {
+    public CompletableFuture<Void> updateLastSeen(UUID uuid, String username, long lastOnline, String lastServer) {
         return CompletableFuture.runAsync(() -> {
             try (Connection connection = databaseManager.getConnection();
+                 // UPSERT so players who disconnect before their async INSERT completes
+                 // (race between TokenManager.createPlayerData and onDisconnect) still
+                 // get their last-seen data persisted.
                  PreparedStatement ps = connection.prepareStatement(
-                         "UPDATE player_data SET last_online = ?, last_server = ? WHERE uuid = ?")) {
-                ps.setLong(1, lastOnline);
-                ps.setString(2, lastServer);
-                ps.setString(3, uuid.toString());
+                         "INSERT INTO player_data (uuid, username, last_online, last_server) VALUES (?, ?, ?, ?) " +
+                         "ON DUPLICATE KEY UPDATE username = VALUES(username), " +
+                         "last_online = VALUES(last_online), last_server = VALUES(last_server)")) {
+                ps.setString(1, uuid.toString());
+                ps.setString(2, username);
+                ps.setLong(3, lastOnline);
+                ps.setString(4, lastServer);
                 ps.executeUpdate();
             } catch (SQLException e) {
                 logger.error("Failed to update last seen for {}", uuid, e);

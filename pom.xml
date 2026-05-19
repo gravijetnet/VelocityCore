@@ -123,7 +123,7 @@
                                     <shadedPattern>net.gravijet.support.libs.jackson</shadedPattern>
                                 </relocation>
                                 <relocation>
-                                    <pattern>com.discord4j</pattern>
+                                    <pattern>discord4j</pattern>
                                     <shadedPattern>net.gravijet.support.libs.discord4j</shadedPattern>
                                 </relocation>
                                 <relocation>

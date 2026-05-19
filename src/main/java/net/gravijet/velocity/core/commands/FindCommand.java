@@ -50,7 +50,9 @@ public class FindCommand implements SimpleCommand {
                     msg("find.online"), "player", player.getUsername(), "server", server));
         }, () -> playerDataDAO.getPlayerDataByName(playerName).thenAccept(data -> {
             if (data != null) {
-                String time = DATE_FORMAT.format(Instant.ofEpochMilli(data.getLastOnline()));
+                String time = data.getLastOnline() > 0
+                        ? DATE_FORMAT.format(Instant.ofEpochMilli(data.getLastOnline()))
+                        : "never";
                 CompatibilityHelper.sendMessage(invocation.source(), CompatibilityHelper.colorize(
                         msg("find.offline"),
                         "player", data.getUsername(),

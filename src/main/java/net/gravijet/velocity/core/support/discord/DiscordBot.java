@@ -21,6 +21,7 @@ import discord4j.core.spec.TextChannelCreateSpec;
 import discord4j.discordjson.json.ApplicationCommandOptionData;
 import discord4j.discordjson.json.ApplicationCommandRequest;
 
+import discord4j.rest.util.AllowedMentions;
 import discord4j.rest.util.Color;
 import net.gravijet.velocity.core.support.SupportPlugin;
 import net.gravijet.velocity.core.support.manager.SupportManager;
@@ -243,8 +244,11 @@ public class DiscordBot {
 
                     if (!claimedByUserId.containsKey(channelId)) {
                         String pleaseClaimMsg = configManager.getMessages().node("support", "discord", "please-claim").getString("Please claim this ticket before replying.");
-                        return msg.delete()
-                                .then(channel.createMessage(pleaseClaimMsg))
+                        return msg.delete().onErrorResume(e -> Mono.empty())
+                                .then(channel.createMessage(MessageCreateSpec.builder()
+                                        .content(pleaseClaimMsg)
+                                        .allowedMentions(AllowedMentions.suppressAll())
+                                        .build()))
                                 .then();
                     }
 
@@ -316,6 +320,11 @@ public class DiscordBot {
     }
 
     public void createSupportChannel(String playerName, String serverName, String language, String sessionId) {
+        if (client == null) {
+            plugin.getLogger().warn("Discord bot not connected yet; support channel not created for {}. "
+                    + "Staff were still notified in-game.", playerName);
+            return;
+        }
         ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
         try {
             String guildId = discordNode.node("guild-id").getString();
@@ -414,13 +423,26 @@ public class DiscordBot {
         TextChannel channel = sessionToChannel.get(sessionId);
         if (channel == null) return;
         String formatted = isStaff ? "**[Team] " + sender + "**: " + message : "**" + sender + "**: " + message;
-        channel.createMessage(formatted).subscribe();
+        createMessageSafe(channel, formatted);
     }
 
     public void sendToChannel(String sessionId, String message) {
         if (message == null || message.isEmpty()) return;
-        TextChannel channel = sessionToChannel.get(sessionId);
-        if (channel != null) channel.createMessage(message).subscribe();
+        createMessageSafe(sessionToChannel.get(sessionId), message);
+    }
+
+    /**
+     * Sends a plain-text message to a Discord channel with all mentions suppressed.
+     * Player-supplied support chat is relayed here, so without this a player could
+     * type "@everyone" / "@here" / a role mention and ping the whole Discord.
+     */
+    private void createMessageSafe(TextChannel channel, String content) {
+        if (channel == null || content == null || content.isEmpty()) return;
+        channel.createMessage(MessageCreateSpec.builder()
+                        .content(content)
+                        .allowedMentions(AllowedMentions.suppressAll())
+                        .build())
+                .subscribe();
     }
 
     public void sendTransferMessageToChannel(String sessionId, String from, String to) {
@@ -487,11 +509,11 @@ public class DiscordBot {
             return false;
         }
 
-        ConfigurationNode discordNode = configManager.getConfig().node("support");
+        ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
         String bugChannelId = discordNode.node("bug-channel-id").getString("");
         String tagId = discordNode.node("bug-tag-id").getString("");
 
-        if (bugChannelId == null || bugChannelId.isEmpty() || bugChannelId.equals("YOUR_BUG_REPORT_CHANNEL_ID_HERE")) {
+        if (bugChannelId.isEmpty() || bugChannelId.equals("YOUR_BUG_REPORT_CHANNEL_ID_HERE")) {
             plugin.getLogger().error("bug-channel-id is not configured in config.yml. Cannot send bug report.");
             return false;
         }
@@ -516,7 +538,7 @@ public class DiscordBot {
             com.fasterxml.jackson.databind.node.ObjectNode bodyNode = bugMapper.createObjectNode();
             bodyNode.put("name", threadName);
             bodyNode.set("message", msgNode);
-            if (tagId != null && !tagId.isEmpty()) {
+            if (!tagId.isEmpty()) {
                 bodyNode.putArray("applied_tags").add(tagId);
             }
 
