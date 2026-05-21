@@ -20,7 +20,7 @@ public class SupportSession {
         this.sessionId = UUID.randomUUID();
         this.playerId = playerId;
         this.playerName = playerName;
-        this.language = language.toUpperCase();
+        this.language = language != null ? language.toUpperCase() : "UNKNOWN";
         this.createdAt = createdAt;
         this.active = true;
     }
@@ -37,7 +37,7 @@ public class SupportSession {
     public void setStaffName(String staffName) { this.staffName = staffName; }
 
     public String getLanguage() { return language; }
-    public void setLanguage(String language) { this.language = language.toUpperCase(); }
+    public void setLanguage(String language) { this.language = language != null ? language.toUpperCase() : "UNKNOWN"; }
 
     public Instant getCreatedAt() { return createdAt; }
 

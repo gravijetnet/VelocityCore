@@ -62,6 +62,7 @@ public class PingCommand implements SimpleCommand {
 
     @Override
     public List<String> suggest(Invocation invocation) {
+        if (!invocation.source().hasPermission("velocitycore.ping")) return List.of();
         if (invocation.arguments().length <= 1) {
             return proxy.getAllPlayers().stream()
                     .map(Player::getUsername)

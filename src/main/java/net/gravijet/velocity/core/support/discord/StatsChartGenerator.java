@@ -50,6 +50,7 @@ public final class StatsChartGenerator {
 
         BufferedImage img = new BufferedImage(totalW, totalH, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
+        try {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,      RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_RENDERING,         RenderingHints.VALUE_RENDER_QUALITY);
@@ -147,7 +148,9 @@ public final class StatsChartGenerator {
         g.setColor(TEXT_SEC);
         g.drawString(String.format("Average (%.2f/5)", globalAvg), legX + 24, legY + 4);
 
-        g.dispose();
+        } finally {
+            g.dispose();
+        }
 
         try {
             File f = File.createTempFile("support_stats_", ".png");

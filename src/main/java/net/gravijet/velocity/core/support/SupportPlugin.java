@@ -40,7 +40,7 @@ public class SupportPlugin {
         }
 
         try {
-            manager    = new SupportManager(this, configManager); // Pass ConfigManager
+            manager    = new SupportManager(this, configManager, core.getPlayerDataDAO());
             discordBot = new DiscordBot(this, configManager, manager); // Pass ConfigManager
 
             var supportMeta = server.getCommandManager().metaBuilder("support").build();

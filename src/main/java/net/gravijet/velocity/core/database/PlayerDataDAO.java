@@ -10,14 +10,37 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class PlayerDataDAO {
 
     private static final Logger logger = LoggerFactory.getLogger(PlayerDataDAO.class);
     private final DatabaseManager databaseManager;
+    // Dedicated executor so shutdown() can wait for in-flight DB writes
+    // (e.g. updateLastSeen fired from onDisconnect) to complete before the
+    // HikariCP pool is closed in Main.onProxyShutdown.
+    private final ExecutorService executor = Executors.newFixedThreadPool(4, r -> {
+        Thread t = new Thread(r, "player-data-db");
+        t.setDaemon(true);
+        return t;
+    });
 
     public PlayerDataDAO(DatabaseManager databaseManager) {
         this.databaseManager = databaseManager;
+    }
+
+    public void shutdown() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     public CompletableFuture<PlayerData> getPlayerData(UUID uuid) {
@@ -43,7 +66,7 @@ public class PlayerDataDAO {
                 logger.error("Failed to get player data for {}", uuid, e);
             }
             return null;
-        });
+        }, executor);
     }
 
     public CompletableFuture<PlayerData> getPlayerDataByName(String name) {
@@ -73,7 +96,7 @@ public class PlayerDataDAO {
                 logger.error("Failed to get player data for name '{}'", name, e);
             }
             return null;
-        });
+        }, executor);
     }
 
     public CompletableFuture<Void> savePlayerData(PlayerData data) {
@@ -103,7 +126,7 @@ public class PlayerDataDAO {
             } catch (SQLException e) {
                 logger.error("Failed to save player data for {}", data.getUuid(), e);
             }
-        });
+        }, executor);
     }
 
     public CompletableFuture<Void> updateLastSeen(UUID uuid, String username, long lastOnline, String lastServer) {
@@ -124,7 +147,7 @@ public class PlayerDataDAO {
             } catch (SQLException e) {
                 logger.error("Failed to update last seen for {}", uuid, e);
             }
-        });
+        }, executor);
     }
 
     public CompletableFuture<List<PlayerData>> getAllPlayers() {
@@ -153,6 +176,6 @@ public class PlayerDataDAO {
                 logger.error("Failed to load all players", e);
             }
             return players;
-        });
+        }, executor);
     }
 }

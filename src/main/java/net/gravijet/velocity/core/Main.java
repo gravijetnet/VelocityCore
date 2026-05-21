@@ -92,6 +92,10 @@ public class Main {
             logger.info("[VelocityCore] Successfully initialized.");
         } catch (Exception e) {
             logger.error("Failed to initialize VelocityCore — plugin disabled. Fix the config and restart.", e);
+            if (tokenManager != null) try { tokenManager.shutdown(); } catch (Exception ignored) {}
+            if (playerDataDAO != null) try { playerDataDAO.shutdown(); } catch (Exception ignored) {}
+            if (advertisingManager != null) try { advertisingManager.stop(); } catch (Exception ignored) {}
+            if (databaseManager != null) try { databaseManager.close(); } catch (Exception ignored) {}
         }
     }
 
@@ -100,6 +104,9 @@ public class Main {
         if (supportPlugin != null) supportPlugin.onProxyShutdown();
         if (advertisingManager != null) advertisingManager.stop();
         if (playerLogger != null) playerLogger.shutdown();
+        // Await pending DB writes before closing the connection pool.
+        if (tokenManager != null) tokenManager.shutdown();
+        if (playerDataDAO != null) playerDataDAO.shutdown();
         if (databaseManager != null) databaseManager.close();
     }
 
@@ -162,6 +169,10 @@ public class Main {
 
     public ConfigManager getConfigManager() {
         return configManager;
+    }
+
+    public PlayerDataDAO getPlayerDataDAO() {
+        return playerDataDAO;
     }
 
     public Logger getLogger() {

@@ -91,9 +91,16 @@ public class SupportCommand implements SimpleCommand {
                         manager.claimSupport(player, args[1], force);
                     });
 
-            case "close" -> staff(player, args, "support.close", 1,
-                    "/support close", "Close the current session.",
-                    () -> manager.closeSupportSession(player));
+            case "close" -> {
+                // Both players (closing their own ticket) and staff (closing their claimed
+                // session) are allowed. SupportManager.closeSupportSession handles the
+                // distinction internally via playerToSession / staffToSession lookups.
+                if (isHelp(args, 1)) {
+                    sendHelp(player, "/support close", "Close the current session.");
+                    return;
+                }
+                manager.closeSupportSession(player);
+            }
 
             case "ban" -> staff(player, args, "support.ban", 3,
                     "/support ban <player> <duration>", "Ban a player from support.",
@@ -110,13 +117,13 @@ public class SupportCommand implements SimpleCommand {
 
     private void staff(Player player, String[] args, String permission, int minArgs,
                        String cmd, String desc, Runnable action) {
-        if (isHelp(args, 1)) {
-            sendHelp(player, cmd, desc);
-            return;
-        }
         if (!perm(player, permission)) {
             CompatibilityHelper.sendMessage(player,
                     CompatibilityHelper.colorize(msg("general.no-permission")));
+            return;
+        }
+        if (isHelp(args, 1)) {
+            sendHelp(player, cmd, desc);
             return;
         }
         if (args.length < minArgs) {

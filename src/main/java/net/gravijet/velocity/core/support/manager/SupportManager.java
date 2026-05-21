@@ -3,6 +3,7 @@ package net.gravijet.velocity.core.support.manager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.scheduler.ScheduledTask;
+import net.gravijet.velocity.core.database.PlayerDataDAO;
 import net.gravijet.velocity.core.support.SupportPlugin;
 import net.gravijet.velocity.core.support.model.BanEntry;
 import net.gravijet.velocity.core.support.model.RatedSession;
@@ -31,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 public class SupportManager {
     private final SupportPlugin plugin;
     private final ConfigManager configManager;
+    private final PlayerDataDAO playerDataDAO;
     private final ObjectMapper mapper = new ObjectMapper();
     private final File bansFile;
     private final DateTimeFormatter logFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -52,9 +54,10 @@ public class SupportManager {
     private final Map<UUID, ClosedSessionNotification> pendingNotifications = new ConcurrentHashMap<>();
     private final Map<UUID, BanEntry> bans = new ConcurrentHashMap<>();
 
-    public SupportManager(SupportPlugin plugin, ConfigManager configManager) {
+    public SupportManager(SupportPlugin plugin, ConfigManager configManager, PlayerDataDAO playerDataDAO) {
         this.plugin = plugin;
         this.configManager = configManager;
+        this.playerDataDAO = playerDataDAO;
         this.bansFile = new File(plugin.getDataDirectory().toFile(), "bans.json");
         loadBans();
         startAutoCloseTask();
@@ -152,7 +155,8 @@ public class SupportManager {
         session.setClosedAt(Instant.now());
         session.setActive(false);
         UUID sessionId = session.getSessionId();
-        activeSessions.remove(sessionId);
+        // activeSessions was already atomically removed by the caller (autoCloseSession /
+        // closeSupportSession / closeSessionCore). Do not remove again here.
         closedSessions.put(sessionId, session);
         playerToLastClosed.put(session.getPlayerId(), sessionId);
         sessionLastActivity.remove(sessionId);
@@ -230,30 +234,44 @@ public class SupportManager {
             return false;
         }
 
-        UUID existingStaffSession = staffToSession.get(staff.getUniqueId());
-        if (existingStaffSession != null && !existingStaffSession.equals(sessionId)) {
-            CompatibilityHelper.sendMessage(staff, getMessage("support.already-handling-session"));
-            return false;
-        }
+        synchronized (session) {
+            // Re-verify the session is still active — it may have been auto-closed between
+            // the activeSessions.get() above and now.
+            if (activeSessions.get(sessionId) != session) {
+                CompatibilityHelper.sendMessage(staff, getMessage("support.no-active-session-for-player", "player", playerName));
+                return false;
+            }
 
-        boolean alreadyClaimed = session.getStaffId() != null || discordStaffToSession.containsValue(sessionId);
-        if (alreadyClaimed && !force) {
-            String existingStaff = session.getStaffName() != null ? session.getStaffName() : "a Discord team member";
-            CompatibilityHelper.sendMessage(staff, getMessage("support.already-claimed", "staff", existingStaff));
-            return false;
-        }
+            UUID existingStaffSession = staffToSession.get(staff.getUniqueId());
+            if (existingStaffSession != null && !existingStaffSession.equals(sessionId)) {
+                CompatibilityHelper.sendMessage(staff, getMessage("support.already-handling-session"));
+                return false;
+            }
 
-        if (force) {
-            discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
-        }
+            boolean alreadyClaimed = session.getStaffId() != null || discordStaffToSession.containsValue(sessionId);
+            if (alreadyClaimed && !force) {
+                String existingStaff = session.getStaffName() != null ? session.getStaffName() : "a Discord team member";
+                CompatibilityHelper.sendMessage(staff, getMessage("support.already-claimed", "staff", existingStaff));
+                return false;
+            }
 
-        session.setStaffId(staff.getUniqueId());
-        session.setStaffName(staff.getUsername());
-        session.setDiscordOnly(false);
-        staffToSession.put(staff.getUniqueId(), sessionId);
-        // Mirror the Discord claim path: a fresh claim counts as activity so the
-        // ticket isn't auto-closed 1h after creation just because chat is quiet.
-        sessionLastActivity.put(sessionId, Instant.now());
+            if (force) {
+                discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
+                // Remove the displaced in-game staff's claim so they can no longer
+                // /spc or /support close a ticket they no longer own.
+                if (session.getStaffId() != null) {
+                    staffToSession.remove(session.getStaffId());
+                }
+            }
+
+            session.setStaffId(staff.getUniqueId());
+            session.setStaffName(staff.getUsername());
+            session.setDiscordOnly(false);
+            staffToSession.put(staff.getUniqueId(), sessionId);
+            // Mirror the Discord claim path: a fresh claim counts as activity so the
+            // ticket isn't auto-closed 1h after creation just because chat is quiet.
+            sessionLastActivity.put(sessionId, Instant.now());
+        }
 
         CompatibilityHelper.sendMessage(staff, getMessage("support.claimed-by-you", "player", target.getUsername()));
         CompatibilityHelper.sendMessage(target, getMessage("support.claimed-by-staff", "staff", staff.getUsername()));
@@ -279,16 +297,31 @@ public class SupportManager {
         SupportSession session = activeSessions.get(sessionId);
         if (session == null) return false;
 
-        UUID existingDiscordSession = discordStaffToSession.get(discordStaffId);
-        if (existingDiscordSession != null && !existingDiscordSession.equals(sessionId)) return false;
+        synchronized (session) {
+            if (activeSessions.get(sessionId) != session) return false;
 
-        boolean alreadyClaimed = session.getStaffId() != null || discordStaffToSession.containsValue(sessionId);
-        if (alreadyClaimed && !force) return false;
+            UUID existingDiscordSession = discordStaffToSession.get(discordStaffId);
+            if (existingDiscordSession != null && !existingDiscordSession.equals(sessionId)) return false;
 
-        session.setStaffName(staffName);
-        session.setDiscordOnly(true);
-        discordStaffToSession.put(discordStaffId, sessionId);
-        sessionLastActivity.put(sessionId, Instant.now());
+            boolean alreadyClaimed = session.getStaffId() != null || discordStaffToSession.containsValue(sessionId);
+            if (alreadyClaimed && !force) return false;
+
+            if (force) {
+                // Remove the displaced in-game staff's claim so they can no longer
+                // /spc or /support close a ticket they no longer own.
+                if (session.getStaffId() != null) {
+                    staffToSession.remove(session.getStaffId());
+                }
+                // Remove any other Discord staff claim on this session.
+                discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
+                session.setStaffId(null);
+            }
+
+            session.setStaffName(staffName);
+            session.setDiscordOnly(true);
+            discordStaffToSession.put(discordStaffId, sessionId);
+            sessionLastActivity.put(sessionId, Instant.now());
+        }
 
         CompatibilityHelper.sendMessage(targetOpt.get(), getMessage("support.claimed-by-staff", "staff", staffName));
         logSessionAction(session, "CLAIMED_DISCORD", "Claimed by Discord user " + staffName);
@@ -424,9 +457,18 @@ public class SupportManager {
         }
     }
 
-    public void handleSupportChatFromDiscord(String discordStaffId, String message) {
-        UUID sessionId = discordStaffToSession.get(discordStaffId);
-        if (sessionId == null) return;
+    /**
+     * Relay a Discord staff message to the in-game player and any in-game staff on the session.
+     * Identified by sessionId so any Discord staff member in the channel can relay, not just
+     * the original claimer (whose discordStaffToSession entry is used for close/claim logic).
+     */
+    public void handleSupportChatFromDiscord(String sessionIdStr, String senderName, String discordUserId, String message) {
+        UUID sessionId;
+        try {
+            sessionId = UUID.fromString(sessionIdStr);
+        } catch (IllegalArgumentException e) {
+            return;
+        }
         SupportSession session = activeSessions.get(sessionId);
         if (session == null) return;
 
@@ -443,7 +485,7 @@ public class SupportManager {
         session.getStaffIdOpt().flatMap(plugin.getServer()::getPlayer)
                 .ifPresent(s -> CompatibilityHelper.sendMessage(s, chatMessage));
 
-        logSessionChat(session, "Discord/" + discordStaffId, message);
+        logSessionChat(session, "Discord/" + senderName + "#" + discordUserId, message);
     }
 
     private void sendRatingPrompt(Player player) {
@@ -537,38 +579,68 @@ public class SupportManager {
     }
 
     public void banPlayer(Player staff, String playerName, String durationStr) {
-        Optional<Player> targetOpt = plugin.getServer().getPlayer(playerName);
-        if (targetOpt.isEmpty()) {
-            CompatibilityHelper.sendMessage(staff, getMessage("general.player-not-found", "player", playerName));
-            return;
-        }
-        Player target = targetOpt.get();
         long millis = DurationUtil.parse(durationStr);
         if (millis <= 0) {
             CompatibilityHelper.sendMessage(staff, getMessage("support.invalid-duration"));
             return;
         }
-        BanEntry ban = new BanEntry(target.getUniqueId(), staff.getUniqueId(), Instant.now(), millis);
-        bans.put(target.getUniqueId(), ban);
-        saveBans();
-        String formatted = DurationUtil.format(millis);
-        CompatibilityHelper.sendMessage(staff, getMessage("support.player-banned", "player", target.getUsername(), "duration", formatted));
-        CompatibilityHelper.sendMessage(target, getMessage("support.you-are-banned", "duration", formatted));
-    }
-
-    public void unbanPlayer(Player staff, String playerName) {
-        Optional<Player> targetOpt = plugin.getServer().getPlayer(playerName);
-        if (targetOpt.isEmpty()) {
+        Optional<Player> onlineOpt = plugin.getServer().getPlayer(playerName);
+        if (onlineOpt.isPresent()) {
+            applyBan(staff, onlineOpt.get().getUniqueId(), onlineOpt.get().getUsername(), millis);
+            return;
+        }
+        // Offline path: look up by name in the database.
+        if (playerDataDAO == null) {
             CompatibilityHelper.sendMessage(staff, getMessage("general.player-not-found", "player", playerName));
             return;
         }
-        Player target = targetOpt.get();
-        if (bans.remove(target.getUniqueId()) != null) {
+        playerDataDAO.getPlayerDataByName(playerName).thenAccept(data -> {
+            if (data == null) {
+                CompatibilityHelper.sendMessage(staff, getMessage("general.player-not-found", "player", playerName));
+                return;
+            }
+            applyBan(staff, data.getUuid(), data.getUsername(), millis);
+        });
+    }
+
+    private void applyBan(Player staff, UUID targetUuid, String targetName, long millis) {
+        BanEntry ban = new BanEntry(targetUuid, staff.getUniqueId(), Instant.now(), millis);
+        bans.put(targetUuid, ban);
+        saveBans();
+        String formatted = DurationUtil.format(millis);
+        CompatibilityHelper.sendMessage(staff, getMessage("support.player-banned", "player", targetName, "duration", formatted));
+        plugin.getServer().getPlayer(targetUuid)
+                .ifPresent(t -> CompatibilityHelper.sendMessage(t, getMessage("support.you-are-banned", "duration", formatted)));
+    }
+
+    public void unbanPlayer(Player staff, String playerName) {
+        Optional<Player> onlineOpt = plugin.getServer().getPlayer(playerName);
+        if (onlineOpt.isPresent()) {
+            applyUnban(staff, onlineOpt.get().getUniqueId(), onlineOpt.get().getUsername());
+            return;
+        }
+        // Offline path: look up by name in the database.
+        if (playerDataDAO == null) {
+            CompatibilityHelper.sendMessage(staff, getMessage("general.player-not-found", "player", playerName));
+            return;
+        }
+        playerDataDAO.getPlayerDataByName(playerName).thenAccept(data -> {
+            if (data == null) {
+                CompatibilityHelper.sendMessage(staff, getMessage("general.player-not-found", "player", playerName));
+                return;
+            }
+            applyUnban(staff, data.getUuid(), data.getUsername());
+        });
+    }
+
+    private void applyUnban(Player staff, UUID targetUuid, String targetName) {
+        if (bans.remove(targetUuid) != null) {
             saveBans();
-            CompatibilityHelper.sendMessage(staff, getMessage("support.player-unbanned", "player", target.getUsername()));
-            CompatibilityHelper.sendMessage(target, getMessage("support.you-are-unbanned"));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.player-unbanned", "player", targetName));
+            plugin.getServer().getPlayer(targetUuid)
+                    .ifPresent(t -> CompatibilityHelper.sendMessage(t, getMessage("support.you-are-unbanned")));
         } else {
-            CompatibilityHelper.sendMessage(staff, getMessage("support.not-banned", "player", target.getUsername()));
+            CompatibilityHelper.sendMessage(staff, getMessage("support.not-banned", "player", targetName));
         }
     }
 

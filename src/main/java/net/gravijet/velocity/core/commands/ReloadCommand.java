@@ -34,8 +34,7 @@ public class ReloadCommand implements SimpleCommand {
 
     @Override
     public List<String> suggest(Invocation invocation) {
-        if (!hasPermission(invocation)) return List.of();
-        return List.of("vcore", "velocitycore");
+        return List.of();
     }
 
     @Override

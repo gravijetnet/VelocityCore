@@ -64,6 +64,10 @@ public class DatabaseManager {
     }
 
     private void addColumnIfNotExists(Connection connection, String tableName, String columnName, String columnDefinition) {
+        if (!tableName.matches("[A-Za-z0-9_]+") || !columnName.matches("[A-Za-z0-9_]+")) {
+            Main.getInstance().getLogger().error("Rejected unsafe SQL identifier: table={}, column={}", tableName, columnName);
+            return;
+        }
         try {
             DatabaseMetaData md = connection.getMetaData();
             try (ResultSet rs = md.getColumns(null, null, tableName, columnName)) {

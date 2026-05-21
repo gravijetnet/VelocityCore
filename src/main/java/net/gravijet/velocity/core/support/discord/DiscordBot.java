@@ -56,6 +56,8 @@ public class DiscordBot {
     private final Map<String, TextChannel> sessionToChannel = new ConcurrentHashMap<>();
     private final Map<String, String> channelToSession = new ConcurrentHashMap<>();
     private final Map<String, String> channelToPlayer = new ConcurrentHashMap<>();
+    private final Map<String, String> channelToLanguage = new ConcurrentHashMap<>();
+    private final Map<String, String> channelToServer = new ConcurrentHashMap<>();
     private final Map<String, String> sessionToEmbedMsgId = new ConcurrentHashMap<>();
     private final Map<String, String> discordStaffSession = new ConcurrentHashMap<>();
     private final Map<String, String> claimedByUserId = new ConcurrentHashMap<>();
@@ -101,7 +103,15 @@ public class DiscordBot {
     }
 
     public void stop() {
-        if (client != null) client.logout().block();
+        GatewayDiscordClient c = client;
+        if (c != null) {
+            try {
+                c.logout().timeout(java.time.Duration.ofSeconds(5)).block();
+            } catch (Exception e) {
+                plugin.getLogger().warn("Discord logout timed out or failed: {}", e.getMessage());
+            }
+        }
+        httpClient.close();
     }
 
     private void onReady(ReadyEvent event) {
@@ -182,9 +192,14 @@ public class DiscordBot {
 
             String playerName = channelToPlayer.get(channelId);
             if (playerName == null) {
-                TextChannel ch = client.getChannelById(Snowflake.of(channelId))
-                        .ofType(TextChannel.class).blockOptional().orElse(null);
-                playerName = ch != null ? extractFromChannelName(ch.getName(), 2) : "unknown";
+                GatewayDiscordClient c = client;
+                if (c != null) {
+                    TextChannel ch = c.getChannelById(Snowflake.of(channelId))
+                            .ofType(TextChannel.class).blockOptional().orElse(null);
+                    playerName = ch != null ? extractFromChannelName(ch.getName(), 2) : "unknown";
+                } else {
+                    playerName = "unknown";
+                }
             }
 
             String discordId = member.getId().asString();
@@ -194,6 +209,11 @@ public class DiscordBot {
             if (ok) {
                 updateChannelToClaimed(sessionId, claimName, discordId);
                 return configManager.getMessages().node("support", "discord", "claim-message").getString("{staff} has claimed this ticket.").replace("{staff}", claimName);
+            }
+            // Re-check after failure: a concurrent click may have won the race
+            if (claimedByUserId.containsKey(channelId)) {
+                String claimer = claimedByName.getOrDefault(channelId, "someone");
+                return configManager.getMessages().node("support", "discord", "already-claimed").getString("This ticket has already been claimed by {staff}.").replace("{staff}", claimer);
             }
             return "Could not claim the support request.";
         }).subscribeOn(Schedulers.boundedElastic())
@@ -252,9 +272,17 @@ public class DiscordBot {
                                 .then();
                     }
 
+                    final String capturedSessionId = sessionId;
                     return msg.getAuthorAsMember()
-                            .doOnNext(member ->
-                                    manager.handleSupportChatFromDiscord(member.getId().asString(), msg.getContent()))
+                            .flatMap(member -> hasStaffRoleMono(member).flatMap(isStaff -> {
+                                if (!isStaff) return Mono.empty();
+                                manager.handleSupportChatFromDiscord(
+                                        capturedSessionId,
+                                        member.getDisplayName(),
+                                        member.getId().asString(),
+                                        msg.getContent());
+                                return Mono.empty();
+                            }))
                             .then();
                 })
                 .onErrorResume(e -> {
@@ -297,20 +325,21 @@ public class DiscordBot {
                                 if (chart == null) {
                                     return event.editReply().withContent("Failed to generate chart.").then();
                                 }
+                                byte[] chartBytes;
                                 try {
-                                    byte[] chartBytes = Files.readAllBytes(chart.toPath());
-                                    chart.delete();
-                                    return event.editReply().withContentOrNull(null)
-                                            .then(event.createFollowup()
-                                                    .withEphemeral(!visible)
-                                                    .withFiles(discord4j.core.spec.MessageCreateFields.File.of(
-                                                            "stats.png", new java.io.ByteArrayInputStream(chartBytes)))
-                                                    .then());
+                                    chartBytes = Files.readAllBytes(chart.toPath());
                                 } catch (Exception e) {
-                                    plugin.getLogger().error("Error sending stats chart.", e);
+                                    plugin.getLogger().error("Error reading stats chart.", e);
                                     chart.delete();
                                     return event.editReply().withContent("Failed to load statistics.").then();
                                 }
+                                chart.delete();
+                                return event.editReply().withContentOrNull(null)
+                                        .then(event.createFollowup()
+                                                .withEphemeral(!visible)
+                                                .withFiles(discord4j.core.spec.MessageCreateFields.File.of(
+                                                        "stats.png", new java.io.ByteArrayInputStream(chartBytes)))
+                                                .then());
                             })
                             .onErrorResume(e -> {
                                 plugin.getLogger().error("Error handling /stats command.", e);
@@ -340,10 +369,11 @@ public class DiscordBot {
             String channelNameFormat = discordNode.node("channel-name-format").getString("{status}-{language}-{player}-{server}");
             String openColor = discordNode.node("open-color").getString("BLUE");
 
-            Guild guild = client.getGuildById(Snowflake.of(guildId)).block();
+            Guild guild = client.getGuildById(Snowflake.of(guildId))
+                    .timeout(java.time.Duration.ofSeconds(10)).block();
             if (guild == null) return;
             Category cat = client.getChannelById(Snowflake.of(supportCategoryId))
-                    .ofType(Category.class).blockOptional().orElse(null);
+                    .ofType(Category.class).timeout(java.time.Duration.ofSeconds(10)).blockOptional().orElse(null);
             if (cat == null) {
                 plugin.getLogger().error("support-category-id '{}' is not a category channel.", supportCategoryId);
                 return;
@@ -351,13 +381,16 @@ public class DiscordBot {
 
             String name = buildChannelName("o", language, playerName, serverName, channelNameFormat);
             TextChannel channel = guild.createTextChannel(TextChannelCreateSpec.builder()
-                    .name(name).parentId(cat.getId()).build()).block();
+                    .name(name).parentId(cat.getId()).build())
+                    .timeout(java.time.Duration.ofSeconds(10)).block();
             if (channel == null) return;
 
             String chId = channel.getId().asString();
             sessionToChannel.put(sessionId, channel);
             channelToSession.put(chId, sessionId);
             channelToPlayer.put(chId, playerName);
+            channelToLanguage.put(chId, language);
+            channelToServer.put(chId, serverName);
 
             EmbedCreateSpec embed = EmbedCreateSpec.builder()
                     .color(parseColor(openColor))
@@ -374,7 +407,7 @@ public class DiscordBot {
                     .addComponent(ActionRow.of(
                             Button.success("claim_" + chId, "Claim"),
                             Button.danger("close_" + chId, "Close")))
-                    .build()).block();
+                    .build()).timeout(java.time.Duration.ofSeconds(10)).block();
 
             if (embedMsg != null) sessionToEmbedMsgId.put(sessionId, embedMsg.getId().asString());
             plugin.getLogger().info("Created support channel: {}", name);
@@ -411,7 +444,13 @@ public class DiscordBot {
             }
         }
 
-        channel.edit(spec -> spec.setName(channel.getName().replaceFirst("^o-", "c-"))).subscribe();
+        String fmt = configManager.getConfig().node("support", "discord", "channel-name-format")
+                .getString("{status}-{language}-{player}-{server}");
+        String player = channelToPlayer.getOrDefault(chId, "player");
+        String lang   = channelToLanguage.getOrDefault(chId, "en");
+        String srv    = channelToServer.getOrDefault(chId, "srv");
+        String newName = buildChannelName("c", lang, player, srv, fmt);
+        channel.edit(spec -> spec.setName(newName)).subscribe();
         claimedByUserId.put(chId, staffDiscordId);
         claimedByName.put(chId, staffName);
         discordStaffSession.put(staffDiscordId, sessionId);
@@ -473,6 +512,8 @@ public class DiscordBot {
         sessionToChannel.remove(sessionId);
         channelToSession.remove(chId);
         channelToPlayer.remove(chId);
+        channelToLanguage.remove(chId);
+        channelToServer.remove(chId);
         sessionToEmbedMsgId.remove(sessionId);
         claimedByUserId.remove(chId);
         claimedByName.remove(chId);
@@ -534,7 +575,7 @@ public class DiscordBot {
             com.fasterxml.jackson.databind.node.ObjectNode msgNode = bugMapper.createObjectNode();
             msgNode.putArray("embeds").add(embedNode);
 
-            String threadName = "Bug: " + title.substring(0, Math.min(title.length(), 90));
+            String threadName = "Bug: " + title.substring(0, Math.min(title.length(), 95));
             com.fasterxml.jackson.databind.node.ObjectNode bodyNode = bugMapper.createObjectNode();
             bodyNode.put("name", threadName);
             bodyNode.set("message", msgNode);
@@ -574,18 +615,6 @@ public class DiscordBot {
         }
     }
 
-    public String getSessionIdByDiscordStaff(String discordId) {
-        return discordStaffSession.get(discordId);
-    }
-
-    public void updateDiscordStaffSession(String discordId, String sessionId) {
-        discordStaffSession.put(discordId, sessionId);
-    }
-
-    public void removeDiscordStaffSession(String discordId) {
-        discordStaffSession.remove(discordId);
-    }
-
     private void sendTranscript(TextChannel channel, String sessionId, String language, String playerName, Instant createdAt) throws Exception {
         ConfigurationNode discordNode = configManager.getConfig().node("support", "discord");
         String transcriptChannelId = discordNode.node("transcript-channel-id").getString();
@@ -612,8 +641,12 @@ public class DiscordBot {
                 .timestamp(Instant.now())
                 .build();
 
-        byte[] fileBytes = Files.readAllBytes(file.toPath());
-        file.delete();
+        byte[] fileBytes;
+        try {
+            fileBytes = Files.readAllBytes(file.toPath());
+        } finally {
+            file.delete();
+        }
         transcriptCh.createMessage(MessageCreateSpec.builder()
                 .addEmbed(embed)
                 .addFile(file.getName(), new java.io.ByteArrayInputStream(fileBytes))

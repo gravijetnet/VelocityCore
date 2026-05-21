@@ -51,11 +51,18 @@ public class BanEntry {
 
     public boolean isExpired() {
         if (duration == Long.MAX_VALUE) return false;
-        return System.currentTimeMillis() > bannedAtEpoch + duration;
+        long expiry = bannedAtEpoch + duration;
+        // Overflow (pathologically large duration) means expiry is far in the future.
+        if (expiry < 0) return false;
+        return System.currentTimeMillis() > expiry;
     }
 
     public long getRemainingMillis() {
         if (duration == Long.MAX_VALUE) return Long.MAX_VALUE;
-        return Math.max(0L, bannedAtEpoch + duration - System.currentTimeMillis());
+        long expiry = bannedAtEpoch + duration;
+        // Overflow (pathologically large duration) means expiry is far in the future —
+        // consistent with isExpired() which also returns false for this case.
+        if (expiry < 0) return Long.MAX_VALUE;
+        return Math.max(0L, expiry - System.currentTimeMillis());
     }
 }

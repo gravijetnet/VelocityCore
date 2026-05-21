@@ -18,11 +18,17 @@ public final class DurationUtil {
         while (m.find()) {
             found = true;
             long v = Long.parseLong(m.group(1));
-            switch (m.group(2)) {
-                case "d" -> total += v * 86_400_000L;
-                case "h" -> total += v * 3_600_000L;
-                case "m" -> total += v * 60_000L;
-                case "s" -> total += v * 1_000L;
+            try {
+                long addition = switch (m.group(2)) {
+                    case "d" -> Math.multiplyExact(v, 86_400_000L);
+                    case "h" -> Math.multiplyExact(v, 3_600_000L);
+                    case "m" -> Math.multiplyExact(v, 60_000L);
+                    case "s" -> Math.multiplyExact(v, 1_000L);
+                    default  -> 0L;
+                };
+                total = Math.addExact(total, addition);
+            } catch (ArithmeticException e) {
+                return Long.MAX_VALUE; // treat overflow as permanent
             }
         }
         return found ? total : -1L;

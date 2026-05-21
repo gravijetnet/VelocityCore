@@ -19,7 +19,11 @@ public class AdvertisingManager {
     private final Main plugin;
     private final ProxyServer server;
     private final ConfigManager configManager;
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "advertising-scheduler");
+        t.setDaemon(true);
+        return t;
+    });
     private ScheduledFuture<?> task;
     private final AtomicInteger currentMessageIndex = new AtomicInteger(0);
 
@@ -65,5 +69,13 @@ public class AdvertisingManager {
             task.cancel(false);
         }
         scheduler.shutdown();
+        try {
+            if (!scheduler.awaitTermination(3, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 }

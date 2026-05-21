@@ -10,6 +10,9 @@ import java.sql.*;
 import java.time.LocalDate;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class TokenManager {
     private static final Logger logger = LoggerFactory.getLogger(TokenManager.class);
@@ -17,10 +20,28 @@ public class TokenManager {
     private final ProxyServer proxy;
     // Upper bound for permission-based token amounts. Checked via linear scan, so keep small.
     private static final int TOKEN_PERMISSION_UPPER_BOUND = 1_000;
+    // Dedicated executor so DB operations don't block the common fork-join pool.
+    private final ExecutorService executor = Executors.newFixedThreadPool(2, r -> {
+        Thread t = new Thread(r, "token-manager-db");
+        t.setDaemon(true);
+        return t;
+    });
 
     public TokenManager(DatabaseManager databaseManager, ProxyServer proxy) {
         this.databaseManager = databaseManager;
         this.proxy = proxy;
+    }
+
+    public void shutdown() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     public CompletableFuture<PlayerData> getPlayerData(UUID uuid) {
@@ -51,7 +72,7 @@ public class TokenManager {
                 logger.error("Failed to get player data for {}", uuid, e);
                 return null;
             }
-        });
+        }, executor);
     }
 
     private PlayerData createPlayerData(UUID uuid) {
@@ -93,7 +114,7 @@ public class TokenManager {
                 logger.error("Failed to use token for {}", uuid, e);
                 return false;
             }
-        });
+        }, executor);
     }
 
     public CompletableFuture<Boolean> addPermanentTokens(UUID uuid, int amount) {
@@ -109,7 +130,7 @@ public class TokenManager {
                 logger.error("Failed to add permanent tokens for {}", uuid, e);
                 return false;
             }
-        });
+        }, executor);
     }
 
     public CompletableFuture<Boolean> removePermanentTokens(UUID uuid, int amount) {
@@ -125,7 +146,7 @@ public class TokenManager {
                 logger.error("Failed to remove permanent tokens for {}", uuid, e);
                 return false;
             }
-        });
+        }, executor);
     }
 
     private void checkMonthlyReset(PlayerData data) {
@@ -238,14 +259,21 @@ public class TokenManager {
     }
 
     public CompletableFuture<Boolean> recalculateMonthlyTokens(UUID uuid) {
-        return getPlayerData(uuid).thenApplyAsync(data -> {
-            if (data != null) {
-                data.setMonthlyTokens(calculateMonthlyTokens(uuid));
-                data.setLastResetMonth(getCurrentYearMonth());
-                return savePlayerData(data);
+        return CompletableFuture.supplyAsync(() -> {
+            int newMonthly = calculateMonthlyTokens(uuid);
+            int currentYearMonth = getCurrentYearMonth();
+            try (Connection conn = databaseManager.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(
+                         "UPDATE player_data SET monthly_tokens = ?, last_reset_month = ? WHERE uuid = ?")) {
+                stmt.setInt(1, newMonthly);
+                stmt.setInt(2, currentYearMonth);
+                stmt.setString(3, uuid.toString());
+                return stmt.executeUpdate() > 0;
+            } catch (SQLException e) {
+                logger.error("Failed to recalculate monthly tokens for {}", uuid, e);
+                return false;
             }
-            return false;
-        });
+        }, executor);
     }
 
     public boolean hasUnlimitedTokens(UUID uuid) {
@@ -266,6 +294,6 @@ public class TokenManager {
                 logger.error("Failed to set color for {}", uuid, e);
                 return false;
             }
-        });
+        }, executor);
     }
 }
