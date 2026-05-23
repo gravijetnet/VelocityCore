@@ -62,7 +62,7 @@ public class BugCommand implements SimpleCommand {
         if (lastUsed != null && now - lastUsed < COOLDOWN_MS) {
             long remaining = Math.max(1L, (COOLDOWN_MS - (now - lastUsed)) / 1000L);
             CompatibilityHelper.sendMessage(player, CompatibilityHelper.colorize(
-                    "<red>Please wait <white>" + remaining + "s<red> before submitting another bug report."));
+                    msg("bug.cooldown"), "seconds", String.valueOf(remaining)));
             return;
         }
         // Replace (not just put) to lazily evict the previous expired entry.

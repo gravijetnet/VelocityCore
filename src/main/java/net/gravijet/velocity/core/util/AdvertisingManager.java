@@ -55,9 +55,9 @@ public class AdvertisingManager {
             return;
         }
 
-        currentMessageIndex.set(0);
+        final int messageCount = messages.size();
         task = scheduler.scheduleAtFixedRate(() -> {
-            int idx = currentMessageIndex.getAndUpdate(i -> (i + 1) % messages.size());
+            int idx = currentMessageIndex.getAndUpdate(i -> (i + 1) % messageCount);
             String message = messages.get(idx);
             Component component = CompatibilityHelper.colorize(message);
             server.getAllPlayers().forEach(player -> CompatibilityHelper.sendMessage(player, component));

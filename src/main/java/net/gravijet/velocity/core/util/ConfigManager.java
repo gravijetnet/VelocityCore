@@ -46,12 +46,13 @@ public class ConfigManager {
             // Use an absolute path to get the resource from the root of the JAR
             try (InputStream in = Main.class.getResourceAsStream("/" + fileName)) {
                 if (in == null) {
-                    throw new IOException("Resource not found: " + fileName);
+                    throw new IOException("Resource not found in JAR: " + fileName);
                 }
                 Files.createDirectories(filePath.getParent());
                 Files.copy(in, filePath);
             } catch (IOException e) {
-                CompatibilityHelper.sendMessage(server.getConsoleCommandSource(), Component.text("Could not create " + fileName + ": " + e.getMessage(), NamedTextColor.RED));
+                // Rethrow so the caller (onProxyInitialization) can disable the plugin cleanly.
+                throw new RuntimeException("Could not create default config '" + fileName + "': " + e.getMessage(), e);
             }
         }
 

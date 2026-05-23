@@ -150,7 +150,10 @@ public class JoinMeManager {
 
 
     public void forceJoinMe(Player player) {
-        sendJoinMe(player, true);
+        sendJoinMe(player, true).exceptionally(e -> {
+            plugin.getLogger().error("Error in forceJoinMe for {}", player.getUsername(), e);
+            return false;
+        });
     }
 
     public long getCooldown(UUID uuid) {

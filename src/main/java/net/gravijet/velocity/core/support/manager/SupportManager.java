@@ -21,7 +21,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,7 +34,7 @@ public class SupportManager {
     private final PlayerDataDAO playerDataDAO;
     private final ObjectMapper mapper = new ObjectMapper();
     private final File bansFile;
-    private final DateTimeFormatter logFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private final DateTimeFormatter logFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(java.time.ZoneOffset.UTC);
     private ScheduledTask autoCloseTask;
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "support-io");
@@ -47,6 +46,8 @@ public class SupportManager {
     private final Map<UUID, UUID> playerToSession = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> staffToSession = new ConcurrentHashMap<>();
     private final Map<String, UUID> discordStaffToSession = new ConcurrentHashMap<>();
+    // Reverse of discordStaffToSession: sessionId -> discordStaffId, kept in sync to avoid O(n) containsValue scans.
+    private final Map<UUID, String> sessionToDiscordStaff = new ConcurrentHashMap<>();
     private final Map<UUID, SupportSession> closedSessions = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> playerToLastClosed = new ConcurrentHashMap<>();
     private final Map<UUID, RatedSession> ratedSessions = new ConcurrentHashMap<>();
@@ -128,7 +129,8 @@ public class SupportManager {
         staffOpt.ifPresent(staff ->
             CompatibilityHelper.sendMessage(staff, getMessage("support.ticket-closed-staff", "player", session.getPlayerName())));
 
-        discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
+        String prevDiscord = sessionToDiscordStaff.remove(sessionId);
+        if (prevDiscord != null) discordStaffToSession.remove(prevDiscord);
 
         Optional<Player> playerOpt = plugin.getServer().getPlayer(session.getPlayerId());
         playerToSession.remove(session.getPlayerId());
@@ -248,7 +250,7 @@ public class SupportManager {
                 return false;
             }
 
-            boolean alreadyClaimed = session.getStaffId() != null || discordStaffToSession.containsValue(sessionId);
+            boolean alreadyClaimed = session.getStaffId() != null || sessionToDiscordStaff.containsKey(sessionId);
             if (alreadyClaimed && !force) {
                 String existingStaff = session.getStaffName() != null ? session.getStaffName() : "a Discord team member";
                 CompatibilityHelper.sendMessage(staff, getMessage("support.already-claimed", "staff", existingStaff));
@@ -256,7 +258,8 @@ public class SupportManager {
             }
 
             if (force) {
-                discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
+                String prevDiscordStaff = sessionToDiscordStaff.remove(sessionId);
+                if (prevDiscordStaff != null) discordStaffToSession.remove(prevDiscordStaff);
                 // Remove the displaced in-game staff's claim so they can no longer
                 // /spc or /support close a ticket they no longer own.
                 if (session.getStaffId() != null) {
@@ -303,7 +306,7 @@ public class SupportManager {
             UUID existingDiscordSession = discordStaffToSession.get(discordStaffId);
             if (existingDiscordSession != null && !existingDiscordSession.equals(sessionId)) return false;
 
-            boolean alreadyClaimed = session.getStaffId() != null || discordStaffToSession.containsValue(sessionId);
+            boolean alreadyClaimed = session.getStaffId() != null || sessionToDiscordStaff.containsKey(sessionId);
             if (alreadyClaimed && !force) return false;
 
             if (force) {
@@ -313,13 +316,15 @@ public class SupportManager {
                     staffToSession.remove(session.getStaffId());
                 }
                 // Remove any other Discord staff claim on this session.
-                discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
+                String prevDiscordStaff = sessionToDiscordStaff.remove(sessionId);
+                if (prevDiscordStaff != null) discordStaffToSession.remove(prevDiscordStaff);
                 session.setStaffId(null);
             }
 
             session.setStaffName(staffName);
             session.setDiscordOnly(true);
             discordStaffToSession.put(discordStaffId, sessionId);
+            sessionToDiscordStaff.put(sessionId, discordStaffId);
             sessionLastActivity.put(sessionId, Instant.now());
         }
 
@@ -349,7 +354,8 @@ public class SupportManager {
             }
         });
 
-        discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
+        String prevDiscord2 = sessionToDiscordStaff.remove(sessionId);
+        if (prevDiscord2 != null) discordStaffToSession.remove(prevDiscord2);
         playerToSession.remove(session.getPlayerId());
 
         Optional<Player> playerOpt = plugin.getServer().getPlayer(session.getPlayerId());
@@ -392,8 +398,10 @@ public class SupportManager {
 
         if (discordStaffId != null) {
             discordStaffToSession.remove(discordStaffId);
+            sessionToDiscordStaff.remove(sessionId);
         } else {
-            discordStaffToSession.entrySet().removeIf(e -> e.getValue().equals(sessionId));
+            String prevDiscord3 = sessionToDiscordStaff.remove(sessionId);
+            if (prevDiscord3 != null) discordStaffToSession.remove(prevDiscord3);
         }
         playerToSession.remove(session.getPlayerId());
 
@@ -670,12 +678,16 @@ public class SupportManager {
     }
 
     private boolean hasPermission(Player p, String permission) {
-        return p.hasPermission(permission) || p.hasPermission(getStaffPermission() + ".*");
+        // Check the specific permission directly; also honour the wildcard only when
+        // the requested permission is a sub-node of the staff base permission.
+        String base = getStaffPermission();
+        boolean wildcardApplies = permission.startsWith(base + ".") || permission.equals(base);
+        return p.hasPermission(permission) || (wildcardApplies && p.hasPermission(base + ".*"));
     }
 
     private void logSessionAction(SupportSession session, String action, String detail) {
-        String line = String.format("[%s] [%s] %s | player=%s | staff=%s | %s%n",
-                logFormatter.format(LocalDateTime.now()),
+        String line = String.format("[%s UTC] [%s] %s | player=%s | staff=%s | %s%n",
+                logFormatter.format(Instant.now()),
                 session.getSessionId().toString().substring(0, 8),
                 action,
                 session.getPlayerName(),
@@ -685,8 +697,8 @@ public class SupportManager {
     }
 
     private void logSessionChat(SupportSession session, String author, String message) {
-        String line = String.format("[%s] [%s] %s: %s%n",
-                logFormatter.format(LocalDateTime.now()),
+        String line = String.format("[%s UTC] [%s] %s: %s%n",
+                logFormatter.format(Instant.now()),
                 session.getSessionId().toString().substring(0, 8),
                 author, message);
         appendLog("chat.log", line);

@@ -111,7 +111,6 @@ public class DiscordBot {
                 plugin.getLogger().warn("Discord logout timed out or failed: {}", e.getMessage());
             }
         }
-        httpClient.close();
     }
 
     private void onReady(ReadyEvent event) {
@@ -192,14 +191,10 @@ public class DiscordBot {
 
             String playerName = channelToPlayer.get(channelId);
             if (playerName == null) {
-                GatewayDiscordClient c = client;
-                if (c != null) {
-                    TextChannel ch = c.getChannelById(Snowflake.of(channelId))
-                            .ofType(TextChannel.class).blockOptional().orElse(null);
-                    playerName = ch != null ? extractFromChannelName(ch.getName(), 2) : "unknown";
-                } else {
-                    playerName = "unknown";
-                }
+                // channelToPlayer is populated when the channel is created; if it's missing
+                // the session is stale and we cannot look up the player by case-correct name.
+                plugin.getLogger().warn("No player mapping for channel {} — cannot claim.", channelId);
+                return "Could not claim: support session data not found.";
             }
 
             String discordId = member.getId().asString();
@@ -251,7 +246,7 @@ public class DiscordBot {
 
     private Mono<Void> onMessageCreate(MessageCreateEvent event) {
         Message msg = event.getMessage();
-        if (msg.getAuthor().map(u -> u.isBot()).orElse(true)) {
+        if (msg.getAuthor().map(u -> u.isBot()).orElse(false)) {
             return Mono.empty();
         }
 
@@ -507,7 +502,13 @@ public class DiscordBot {
             plugin.getLogger().error("Failed to send transcript.", e);
         }
 
-        channel.delete().subscribe();
+        // Delete after transcript is fully sent (sendTranscript is synchronous/blocking).
+        channel.delete()
+                .onErrorResume(e -> {
+                    plugin.getLogger().warn("Failed to delete support channel {}: {}", channel.getId().asString(), e.getMessage());
+                    return Mono.empty();
+                })
+                .subscribe();
 
         sessionToChannel.remove(sessionId);
         channelToSession.remove(chId);
@@ -558,6 +559,10 @@ public class DiscordBot {
             plugin.getLogger().error("bug-channel-id is not configured in config.yml. Cannot send bug report.");
             return false;
         }
+        if (!bugChannelId.matches("\\d+")) {
+            plugin.getLogger().error("bug-channel-id '{}' is not a valid Snowflake. Cannot send bug report.", bugChannelId);
+            return false;
+        }
 
         try {
             String timeStr = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")
@@ -601,8 +606,10 @@ public class DiscordBot {
                             "Bug report failed: the bug channel is a forum channel that requires a tag. " +
                             "Please set 'bug-tag-id' in config.yml to a valid forum tag ID.");
                 } else {
+                    String body = response.body();
+                    String truncated = body.length() > 500 ? body.substring(0, 500) + "…" : body;
                     plugin.getLogger().error("Failed to send bug report. Status: {}, Body: {}",
-                            response.statusCode(), response.body());
+                            response.statusCode(), truncated);
                 }
                 return false;
             }
@@ -663,7 +670,10 @@ public class DiscordBot {
                             LocalDateTime.ofInstant(createdAt, ZoneId.systemDefault())));
             File f = new File(logDir, fname);
 
-            List<Message> messages = channel.getMessagesBefore(Snowflake.of(Instant.now()))
+            // Use a far-future Snowflake so all existing messages are included.
+            // Snowflake.of(Instant.now()) would exclude messages sent in the same
+            // millisecond and, in practice, often returns nothing.
+            List<Message> messages = channel.getMessagesAfter(Snowflake.of(1L))
                     .take(500)
                     .collectList()
                     .block();
@@ -754,8 +764,4 @@ public class DiscordBot {
         return name.length() > 100 ? name.substring(0, 100) : name;
     }
 
-    private String extractFromChannelName(String channelName, int index) {
-        String[] parts = channelName.split("-");
-        return parts.length > index ? parts[index] : "unknown";
-    }
 }

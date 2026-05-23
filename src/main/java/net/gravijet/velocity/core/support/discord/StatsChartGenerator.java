@@ -17,6 +17,10 @@ import java.util.Map;
 public final class StatsChartGenerator {
     private StatsChartGenerator() {}
 
+    static {
+        System.setProperty("java.awt.headless", "true");
+    }
+
     // Discord dark theme palette
     private static final Color BG        = new Color(0x2B2D31);
     private static final Color BG_CARD   = new Color(0x1E1F22);
@@ -34,8 +38,6 @@ public final class StatsChartGenerator {
 
     public static File generate(Map<String, SupportManager.StaffStats> stats, double globalAvg,
                                 int totalRatings, Logger logger) {
-        System.setProperty("java.awt.headless", "true");
-
         final int BAR_W  = 88;
         final int GAP    = 20;
         final int LEFT   = 56;

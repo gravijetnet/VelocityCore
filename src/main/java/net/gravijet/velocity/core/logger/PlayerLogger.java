@@ -59,7 +59,8 @@ public class PlayerLogger {
 
     private void log(String playerName, String message) {
         String line = "[" + LocalDateTime.now().format(FORMATTER) + "] " + message + System.lineSeparator();
-        String safeName = playerName.replaceAll("[^a-zA-Z0-9_]", "_");
+        // Minecraft usernames are [a-zA-Z0-9_]; sanitize defensively in case of unusual proxy config.
+        String safeName = playerName.replace('/', '_').replace('\\', '_').replace(':', '_');
         Path logFile = logDirectory.resolve(safeName + ".log");
         ioExecutor.execute(() -> {
             try {

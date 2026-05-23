@@ -3,7 +3,6 @@ package net.gravijet.velocity.core.commands;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.Player;
-import com.velocitypowered.api.proxy.ProxyServer;
 import net.gravijet.velocity.core.managers.JoinMeManager;
 import net.gravijet.velocity.core.managers.TokenManager;
 import net.gravijet.velocity.core.util.CompatibilityHelper;
@@ -17,7 +16,7 @@ public class TokensCommand implements SimpleCommand {
     private final JoinMeManager joinMeManager;
     private final ConfigManager configManager;
 
-    public TokensCommand(ProxyServer proxy, TokenManager tokenManager, JoinMeManager joinMeManager, ConfigManager configManager) {
+    public TokensCommand(TokenManager tokenManager, JoinMeManager joinMeManager, ConfigManager configManager) {
         this.tokenManager = tokenManager;
         this.joinMeManager = joinMeManager;
         this.configManager = configManager;

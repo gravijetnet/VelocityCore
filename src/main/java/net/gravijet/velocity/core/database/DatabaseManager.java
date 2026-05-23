@@ -2,8 +2,9 @@ package net.gravijet.velocity.core.database;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import net.gravijet.velocity.core.Main;
 import net.gravijet.velocity.core.util.ConfigManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.spongepowered.configurate.ConfigurationNode;
 
 import java.sql.Connection;
@@ -12,6 +13,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class DatabaseManager {
+    private static final Logger logger = LoggerFactory.getLogger(DatabaseManager.class);
     private final HikariDataSource dataSource;
 
     public DatabaseManager(ConfigManager configManager) {
@@ -58,14 +60,13 @@ public class DatabaseManager {
             addColumnIfNotExists(connection, "player_data", "last_online", "BIGINT");
 
         } catch (SQLException e) {
-            Main.getInstance().getLogger().error("Failed to initialize database tables", e);
-            Main.getInstance().shutdown();
+            throw new RuntimeException("Failed to initialize database tables", e);
         }
     }
 
     private void addColumnIfNotExists(Connection connection, String tableName, String columnName, String columnDefinition) {
         if (!tableName.matches("[A-Za-z0-9_]+") || !columnName.matches("[A-Za-z0-9_]+")) {
-            Main.getInstance().getLogger().error("Rejected unsafe SQL identifier: table={}, column={}", tableName, columnName);
+            logger.error("Rejected unsafe SQL identifier: table={}, column={}", tableName, columnName);
             return;
         }
         try {
@@ -79,7 +80,7 @@ public class DatabaseManager {
                 }
             }
         } catch (SQLException e) {
-            Main.getInstance().getLogger().warn("Could not add column {}.{}: {}", tableName, columnName, e.getMessage());
+            logger.warn("Could not add column {}.{}: {}", tableName, columnName, e.getMessage());
         }
     }
 

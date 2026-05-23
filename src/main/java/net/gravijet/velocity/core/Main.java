@@ -75,7 +75,7 @@ public class Main {
             CommandManager cmd = proxy.getCommandManager();
             cmd.register(cmd.metaBuilder("joinme").build(), new JoinMeCommand(proxy, tokenManager, joinMeManager, configManager));
             cmd.register(cmd.metaBuilder("adminjoinme").aliases("ajm").build(), new AdminJoinMeCommand(proxy, tokenManager, joinMeManager, configManager, playerDataDAO));
-            cmd.register(cmd.metaBuilder("tokens").build(), new TokensCommand(proxy, tokenManager, joinMeManager, configManager));
+            cmd.register(cmd.metaBuilder("tokens").build(), new TokensCommand(tokenManager, joinMeManager, configManager));
             cmd.register(cmd.metaBuilder("vcore").aliases("velocitycore").build(), new ReloadCommand(this));
             
             // Other commands - can be refactored later if needed

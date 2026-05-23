@@ -16,7 +16,8 @@ public class CompatibilityHelper {
 
     public static Component colorize(String text, String... pairs) {
         if (text == null || text.isEmpty()) return Component.empty();
-        for (int i = 0; i + 1 < pairs.length; i += 2) {
+        if (pairs.length % 2 != 0) throw new IllegalArgumentException("pairs must be key-value pairs (even length), got " + pairs.length);
+        for (int i = 0; i < pairs.length; i += 2) {
             text = text.replace("{" + pairs[i] + "}", pairs[i + 1] != null ? pairs[i + 1] : "");
         }
         return MM.deserialize(text);

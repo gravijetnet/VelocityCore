@@ -45,6 +45,9 @@ public class TokenManager {
     }
 
     public CompletableFuture<PlayerData> getPlayerData(UUID uuid) {
+        // Resolve proxy state on the calling thread (safe) before dispatching to the DB executor.
+        String resolvedUsername = proxy.getPlayer(uuid).map(p -> p.getUsername()).orElse("Unknown");
+        int resolvedMonthly = calculateMonthlyTokens(uuid);
         return CompletableFuture.supplyAsync(() -> {
             try (Connection conn = databaseManager.getConnection();
                  PreparedStatement stmt = conn.prepareStatement("SELECT * FROM player_data WHERE uuid = ?")) {
@@ -65,7 +68,7 @@ public class TokenManager {
                         checkMonthlyReset(data);
                         return data;
                     } else {
-                        return createPlayerData(uuid);
+                        return createPlayerData(uuid, resolvedUsername, resolvedMonthly);
                     }
                 }
             } catch (SQLException e) {
@@ -75,13 +78,10 @@ public class TokenManager {
         }, executor);
     }
 
-    private PlayerData createPlayerData(UUID uuid) {
-        String username = proxy.getPlayer(uuid).map(player -> player.getUsername()).orElse("Unknown");
+    private PlayerData createPlayerData(UUID uuid, String username, int monthly) {
         // Seed the monthly allowance on first creation. Without this a player who
         // holds a core.joinme.tokens.<n> permission and joins mid-month gets 0
-        // monthly tokens until the next monthly reset. calculateMonthlyTokens
-        // returns 0 for offline players, preserving the old behaviour off-thread.
-        int monthly = calculateMonthlyTokens(uuid);
+        // monthly tokens until the next monthly reset.
         PlayerData data = new PlayerData(uuid, username, monthly, 2, getCurrentYearMonth(), null, null, 0);
         savePlayerData(data);
         return data;
@@ -164,21 +164,24 @@ public class TokenManager {
         if (proxy.getPlayer(data.getUuid()).isEmpty()) return;
         int newMonthly = calculateMonthlyTokens(data.getUuid());
 
-        // Use a targeted UPDATE instead of a full row write to avoid overwriting
-        // concurrent token deductions (useToken atomic UPDATE) with a stale read.
+        // Guard against concurrent resets: only update if last_reset_month still holds the
+        // old value. If another thread already reset it, executeUpdate returns 0 and we skip
+        // the in-memory mutation to avoid clobbering the already-correct state.
         try (Connection conn = databaseManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(
-                     "UPDATE player_data SET monthly_tokens = ?, last_reset_month = ? WHERE uuid = ?")) {
+                     "UPDATE player_data SET monthly_tokens = ?, last_reset_month = ? WHERE uuid = ? AND last_reset_month = ?")) {
             stmt.setInt(1, newMonthly);
             stmt.setInt(2, currentYearMonth);
             stmt.setString(3, data.getUuid().toString());
-            stmt.executeUpdate();
+            stmt.setInt(4, lastReset);
+            if (stmt.executeUpdate() > 0) {
+                // Keep the in-memory object consistent so callers see the updated values.
+                data.setMonthlyTokens(newMonthly);
+                data.setLastResetMonth(currentYearMonth);
+            }
         } catch (SQLException e) {
             logger.error("Failed to reset monthly tokens for {}", data.getUuid(), e);
         }
-        // Keep the in-memory object consistent so callers see the updated values.
-        data.setMonthlyTokens(newMonthly);
-        data.setLastResetMonth(currentYearMonth);
     }
 
     private int calculateMonthlyTokens(UUID uuid) {
